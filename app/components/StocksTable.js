@@ -8,9 +8,7 @@ function tradingViewUrl(symbol) {
   return `https://www.tradingview.com/chart/?symbol=PSX:${encodeURIComponent(symbol)}`;
 }
 
-// star, symbol, name, price, RSI, volume, entry, exit-today, exit-1to3w,
-// confidence, trend, MACD, RVOL
-const COLUMN_COUNT = 13;
+const COLUMN_COUNT = 10; // star, symbol, name, price, RSI, volume, entry, exit-today, exit-1to3w, confidence
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -116,34 +114,6 @@ function analysisSummary(a) {
   return parts.join(" · ");
 }
 
-/**
- * Plain-language readout of the new institutional-dashboard indicators
- * (EMA trend, MACD, RVOL, support/resistance distance, multi-timeframe
- * alignment) — the expanded-row counterpart to analysisSummary above,
- * which stays scoped to the original entry/exit/confidence factors.
- */
-function indicatorsSummary(ind) {
-  const mtf = ind.multiTimeframe;
-  const mtfText = mtf?.alignment
-    ? `Multi-timeframe: ${mtf.timeframes
-        .filter((t) => t.trend !== null)
-        .map((t) => `${t.label} ${t.trend}`)
-        .join(", ")} (${mtf.alignment} bullish)`
-    : "Multi-timeframe: not enough weekly/monthly history yet";
-  const parts = [
-    `EMA trend ${ind.emaTrend.label ?? "n/a"} (${ind.emaTrend.score ?? "n/a"}) — EMA20 ${
-      ind.emaTrend.ema20 ?? "n/a"
-    }, EMA50 ${ind.emaTrend.ema50 ?? "n/a"}, EMA200 ${ind.emaTrend.ema200 ?? "n/a"}`,
-    `MACD ${ind.macd.status}${ind.macd.freshCrossover ? ` (fresh ${ind.macd.freshCrossover} cross)` : ""}`,
-    `RVOL ${ind.rvol.value ?? "n/a"}× (${ind.rvol.bucket ?? "n/a"})${ind.rvol.spike ? " — volume spike" : ""}`,
-    `${ind.support.distanceToSupportPct}% above support (${ind.support.value}), ${ind.support.distanceToResistancePct}% below resistance (${ind.support.resistance})${
-      ind.support.nearSupport ? " — trading near support" : ""
-    }`,
-    mtfText,
-  ];
-  return parts.join(" · ");
-}
-
 function EntryExitCell({ value }) {
   if (value === null || value === undefined) {
     return <span className="text-sm text-ink-3">—</span>;
@@ -175,110 +145,6 @@ function ConfidenceBadge({ analysis }) {
       }}
     >
       {analysis.confidence}
-    </span>
-  );
-}
-
-// Green/blue/red mirror the confidence badge's up/neutral/down palette so a
-// glance across Trend/MACD/Confidence reads as one consistent color language.
-const DIRECTION_STYLE = {
-  Bullish: { color: "var(--up-text)", bg: "var(--up)" },
-  Neutral: { color: "var(--accent)", bg: "var(--accent)" },
-  Bearish: { color: "var(--down)", bg: "var(--down)" },
-};
-
-function DirectionBadge({ label, title }) {
-  if (!label) return <span className="text-xs text-ink-3">—</span>;
-  const style = DIRECTION_STYLE[label] ?? DIRECTION_STYLE.Neutral;
-  return (
-    <span
-      title={title}
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide"
-      style={{
-        color: style.color,
-        backgroundColor: `color-mix(in srgb, ${style.bg} 16%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${style.bg} 40%, transparent)`,
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-/**
- * EMA20/50/200 trend read (Bullish/Neutral/Bearish + "n/3" score) — separate
- * from the RSI/MACD/SMA-blended Confidence badge; this one only asks "is
- * price aligned above its moving averages," nothing else.
- */
-function TrendBadge({ indicators }) {
-  const emaTrend = indicators?.emaTrend;
-  if (!emaTrend || !emaTrend.label) return <span className="text-xs text-ink-3">—</span>;
-  const title = `EMA20 ${emaTrend.ema20 ?? "n/a"} · EMA50 ${emaTrend.ema50 ?? "n/a"} · EMA200 ${
-    emaTrend.ema200 ?? "n/a"
-  } — ${emaTrend.score} alignment checks passed (price>EMA20, EMA20>EMA50, EMA50>EMA200)`;
-  return (
-    <span className="inline-flex flex-col items-center gap-0.5">
-      <DirectionBadge label={emaTrend.label} title={title} />
-      <span className="font-mono text-[9px] text-ink-3">{emaTrend.score}</span>
-    </span>
-  );
-}
-
-const MACD_LABEL = {
-  "Bullish Cross": "Bullish",
-  "Bearish Cross": "Bearish",
-  Neutral: "Neutral",
-};
-
-/** MACD(12,26,9) status, with a "fresh" ring when the cross happened on the latest bar. */
-function MacdBadge({ indicators }) {
-  const macd = indicators?.macd;
-  if (!macd || macd.line === null) return <span className="text-xs text-ink-3">—</span>;
-  const label = MACD_LABEL[macd.status] ?? "Neutral";
-  const title = `MACD ${macd.line} · Signal ${macd.signal} · Histogram ${macd.histogram}${
-    macd.freshCrossover ? ` · fresh ${macd.freshCrossover} crossover on the latest candle` : ""
-  }`;
-  return (
-    <span
-      className={`inline-flex items-center rounded px-1 ${
-        macd.freshCrossover ? "ring-1 ring-offset-1 ring-offset-surface" : ""
-      }`}
-      style={macd.freshCrossover ? { "--tw-ring-color": DIRECTION_STYLE[label]?.bg } : undefined}
-    >
-      <DirectionBadge label={label} title={title} />
-    </span>
-  );
-}
-
-const RVOL_COLOR = {
-  Low: "var(--ink-3)",
-  Normal: "var(--accent)",
-  High: "var(--warning)",
-  "Very High": "var(--down)",
-};
-
-/** Relative volume vs. the 20-day average, with a spike badge above 1.5×. */
-function RvolCell({ indicators }) {
-  const rvol = indicators?.rvol;
-  if (!rvol || rvol.value === null) return <span className="text-xs text-ink-3">—</span>;
-  return (
-    <span
-      className="inline-flex items-center gap-1 font-mono text-[12px] tabular-nums"
-      title={`${rvol.value}× the 20-day average volume — ${rvol.bucket}`}
-      style={{ color: RVOL_COLOR[rvol.bucket] ?? "var(--ink)" }}
-    >
-      {rvol.value}×
-      {rvol.spike && (
-        <span
-          className="rounded px-1 py-px text-[9px] font-semibold tracking-wide"
-          style={{
-            color: "var(--down)",
-            backgroundColor: "color-mix(in srgb, var(--down) 14%, transparent)",
-          }}
-        >
-          SPIKE
-        </span>
-      )}
     </span>
   );
 }
@@ -476,9 +342,6 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
           {analysisSummary(stock.analysis)}
         </p>
       )}
-      {stock.analysis?.indicators && (
-        <p className="mb-1.5 text-[11px] text-ink-3">{indicatorsSummary(stock.analysis.indicators)}</p>
-      )}
       {failed ? (
         <p className="py-4 text-sm text-ink-3">Couldn&apos;t load the RSI trend — try again.</p>
       ) : history === null ? (
@@ -520,21 +383,18 @@ export default function StocksTable({
           (still sticky on Y within the same container). */}
       <div className="hidden overflow-hidden rounded-xl border border-hairline bg-surface shadow-sm sm:block">
         <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full min-w-[1180px] table-fixed text-xs md:text-sm">
+          <table className="w-full min-w-[980px] table-fixed text-xs md:text-sm">
             <colgroup>
-              <col style={{ width: "3%" }} />
+              <col style={{ width: "4%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "17%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "7%" }} />
+              <col style={{ width: "18%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "10%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "16%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <tr className="border-b border-grid">
@@ -592,30 +452,6 @@ export default function StocksTable({
                   Confidence
                   <SortIndicator active={sortKey === "confidence"} dir={sortDir} />
                 </th>
-                <th
-                  onClick={() => onSort("trend")}
-                  title="EMA20/50/200 alignment (price>EMA20, EMA20>EMA50, EMA50>EMA200) — see the expanded row for Daily/Weekly/Monthly confirmation"
-                  className={`${sortableCell} text-center`}
-                >
-                  Trend
-                  <SortIndicator active={sortKey === "trend"} dir={sortDir} />
-                </th>
-                <th
-                  onClick={() => onSort("macd")}
-                  title="MACD(12,26,9) — which side of the signal line MACD is on, ringed when it crossed on the latest candle"
-                  className={`${sortableCell} text-center`}
-                >
-                  MACD
-                  <SortIndicator active={sortKey === "macd"} dir={sortDir} />
-                </th>
-                <th
-                  onClick={() => onSort("rvol")}
-                  title="Today's volume ÷ the 20-day average — SPIKE badge above 1.5×"
-                  className={`${sortableCell} text-right`}
-                >
-                  RVOL
-                  <SortIndicator active={sortKey === "rvol"} dir={sortDir} />
-                </th>
               </tr>
             </thead>
             <tbody>
@@ -667,15 +503,6 @@ export default function StocksTable({
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <ConfidenceBadge analysis={stock.analysis} />
-                    </td>
-                    <td className="px-2 py-2.5 text-center">
-                      <TrendBadge indicators={stock.analysis?.indicators} />
-                    </td>
-                    <td className="px-2 py-2.5 text-center">
-                      <MacdBadge indicators={stock.analysis?.indicators} />
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <RvolCell indicators={stock.analysis?.indicators} />
                     </td>
                   </tr>
                   {expandedSymbol === stock.symbol && (
@@ -764,15 +591,6 @@ export default function StocksTable({
                     </span>
                   </span>
                   <ConfidenceBadge analysis={stock.analysis} />
-                </div>
-              )}
-              {stock.analysis?.indicators && (
-                <div className="flex items-center justify-between gap-2 border-t border-hairline/60 px-3 py-2 text-xs">
-                  <span className="flex items-center gap-1.5">
-                    <TrendBadge indicators={stock.analysis.indicators} />
-                    <MacdBadge indicators={stock.analysis.indicators} />
-                  </span>
-                  <RvolCell indicators={stock.analysis.indicators} />
                 </div>
               )}
             </div>
