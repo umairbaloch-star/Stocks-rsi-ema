@@ -8,7 +8,9 @@ function tradingViewUrl(symbol) {
   return `https://www.tradingview.com/chart/?symbol=PSX:${encodeURIComponent(symbol)}`;
 }
 
-const COLUMN_COUNT = 10; // star, symbol, name, price, RSI, volume, entry, exit-today, exit-1to3w, confidence
+// star, symbol, name, price, RSI, volume, entry, exit-today, exit-1to3w,
+// confidence, last div. date, last div. amount, expected next div. date
+const COLUMN_COUNT = 13;
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -85,6 +87,38 @@ function formatVolume(value) {
   if (value >= 1e6) return (value / 1e6).toFixed(2) + "M";
   if (value >= 1e3) return (value / 1e3).toFixed(1) + "K";
   return String(value);
+}
+
+function formatDate(ms) {
+  if (ms === null || ms === undefined) return "—";
+  return new Date(ms).toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function DividendDateCell({ value, projected = false }) {
+  if (value === null || value === undefined) {
+    return <span className="text-sm text-ink-3">—</span>;
+  }
+  return (
+    <span
+      className={`font-mono text-[12px] tabular-nums ${projected ? "text-ink-3 italic" : "text-ink"}`}
+      title={projected ? "Estimated from the average gap between past dividend announcements — not a company-confirmed date" : undefined}
+    >
+      {formatDate(value)}
+    </span>
+  );
+}
+
+function DividendAmountCell({ value }) {
+  if (value === null || value === undefined) {
+    return <span className="text-sm text-ink-3">—</span>;
+  }
+  return (
+    <span className="font-mono text-[13px] tabular-nums text-ink">Rs. {value.toFixed(2)}</span>
+  );
 }
 
 const CONFIDENCE_STYLE = {
@@ -342,6 +376,16 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
           {analysisSummary(stock.analysis)}
         </p>
       )}
+      {stock.dividends && (stock.dividends.lastAmount !== null || stock.dividends.lastAnnouncedDate !== null) && (
+        <p className="mb-1.5 text-[11px] text-ink-3">
+          Last dividend Rs. {stock.dividends.lastAmount?.toFixed(2) ?? "—"}/share, announced{" "}
+          {formatDate(stock.dividends.lastAnnouncedDate)}
+          {stock.dividends.expectedNextDate
+            ? ` · next expected ~${formatDate(stock.dividends.expectedNextDate)} (estimated from past cadence, not company-confirmed)`
+            : " · not enough history yet to estimate the next date"}
+          .
+        </p>
+      )}
       {failed ? (
         <p className="py-4 text-sm text-ink-3">Couldn&apos;t load the RSI trend — try again.</p>
       ) : history === null ? (
@@ -383,18 +427,21 @@ export default function StocksTable({
           (still sticky on Y within the same container). */}
       <div className="hidden overflow-hidden rounded-xl border border-hairline bg-surface shadow-sm sm:block">
         <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full min-w-[980px] table-fixed text-xs md:text-sm">
+          <table className="w-full min-w-[1180px] table-fixed text-xs md:text-sm">
             <colgroup>
-              <col style={{ width: "4%" }} />
+              <col style={{ width: "3%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "18%" }} />
-              <col style={{ width: "8%" }} />
+              <col style={{ width: "17%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "11%" }} />
-              <col style={{ width: "9%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "8%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "9%" }} />
-              <col style={{ width: "9%" }} />
-              <col style={{ width: "16%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <tr className="border-b border-grid">
@@ -452,6 +499,30 @@ export default function StocksTable({
                   Confidence
                   <SortIndicator active={sortKey === "confidence"} dir={sortDir} />
                 </th>
+                <th
+                  onClick={() => onSort("nextDividend")}
+                  title="Estimated from the average gap between past dividend announcements — not a company-confirmed date"
+                  className={`${sortableCell} text-right`}
+                >
+                  Next div. (est.)
+                  <SortIndicator active={sortKey === "nextDividend"} dir={sortDir} />
+                </th>
+                <th
+                  onClick={() => onSort("lastDividendAmount")}
+                  title="Rs./share of the most recently announced dividend"
+                  className={`${sortableCell} text-right`}
+                >
+                  Last div. amt
+                  <SortIndicator active={sortKey === "lastDividendAmount"} dir={sortDir} />
+                </th>
+                <th
+                  onClick={() => onSort("lastDividendDate")}
+                  title="Date PSX carried the most recent dividend announcement"
+                  className={`${sortableCell} text-right`}
+                >
+                  Last div. date
+                  <SortIndicator active={sortKey === "lastDividendDate"} dir={sortDir} />
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -503,6 +574,15 @@ export default function StocksTable({
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <ConfidenceBadge analysis={stock.analysis} />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <DividendDateCell value={stock.dividends?.expectedNextDate} projected />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <DividendAmountCell value={stock.dividends?.lastAmount} />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <DividendDateCell value={stock.dividends?.lastAnnouncedDate} />
                     </td>
                   </tr>
                   {expandedSymbol === stock.symbol && (
@@ -593,6 +673,16 @@ export default function StocksTable({
                   <ConfidenceBadge analysis={stock.analysis} />
                 </div>
               )}
+              {stock.dividends &&
+                (stock.dividends.lastAmount !== null || stock.dividends.lastAnnouncedDate !== null) && (
+                  <div className="border-t border-hairline/60 px-3 py-2 text-xs text-ink-3">
+                    Div. Rs. {stock.dividends.lastAmount?.toFixed(2) ?? "—"} on{" "}
+                    {formatDate(stock.dividends.lastAnnouncedDate)}
+                    {stock.dividends.expectedNextDate
+                      ? ` · next ~${formatDate(stock.dividends.expectedNextDate)}`
+                      : ""}
+                  </div>
+                )}
             </div>
             {expandedSymbol === stock.symbol && (
               <div className="border-t border-hairline bg-page/60 px-3 py-2">

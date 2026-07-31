@@ -123,6 +123,9 @@ export default function StocksView({
       if (sortKey === "rsi") return s.rsi?.[period]?.[interval.key] ?? null;
       if (sortKey === "entry") return s.analysis?.entry ?? null;
       if (sortKey === "confidence") return CONFIDENCE_RANK[s.analysis?.confidence] ?? null;
+      if (sortKey === "nextDividend") return s.dividends?.expectedNextDate ?? null;
+      if (sortKey === "lastDividendAmount") return s.dividends?.lastAmount ?? null;
+      if (sortKey === "lastDividendDate") return s.dividends?.lastAnnouncedDate ?? null;
       return s[sortKey];
     };
     copy.sort((a, b) => {
