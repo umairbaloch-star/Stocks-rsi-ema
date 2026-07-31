@@ -126,7 +126,7 @@ export default function StocksView({
       if (sortKey === "confidence") return CONFIDENCE_RANK[s.analysis?.confidence] ?? null;
       if (sortKey === "ema20") return s.signal?.ema20 ?? null;
       if (sortKey === "ema50") return s.signal?.ema50 ?? null;
-      if (sortKey === "macd") return CALL_RANK[s.signal?.macdStatus] ?? null;
+      if (sortKey === "macd") return s.signal?.macdScore ?? null;
       if (sortKey === "signal") return CALL_RANK[s.signal?.signal] ?? null;
       return s[sortKey];
     };

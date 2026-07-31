@@ -125,7 +125,9 @@ function signalSummary(s) {
   const parts = [
     `RSI(14) ${s.rsi14 ?? "—"}`,
     `EMA trend ${s.emaTrend ?? "n/a"} (EMA20 ${s.ema20 ?? "n/a"}, EMA50 ${s.ema50 ?? "n/a"})`,
-    `MACD ${s.macdStatus ?? "n/a"} (histogram ${s.macdHist ?? "n/a"})`,
+    `MACD ${s.macdLine ?? "n/a"} vs Signal ${s.macdSignalLine ?? "n/a"} (histogram ${
+      s.macdHist ?? "n/a"
+    }) — ${s.macdLabel ?? "n/a"} (${s.macdScore !== null && s.macdScore !== undefined ? (s.macdScore > 0 ? "+" : "") + s.macdScore : "n/a"})`,
     `Volume ${s.volumeRatio !== null ? `${s.volumeRatio}× the 20-day average` : "n/a"}${
       s.thinVolume ? " — thin, downgrades a would-be Buy/Sell to Watch" : ""
     }`,
@@ -172,12 +174,14 @@ function ConfidenceBadge({ analysis }) {
 // consistent three-way color language for every badge on this simple
 // RSI+EMA+MACD+Volume read (separate from the Confidence badge above).
 const CALL_STYLE = {
+  "Strong Buy": { color: "var(--up-text)", bg: "var(--up)" },
   Bullish: { color: "var(--up-text)", bg: "var(--up)" },
   Buy: { color: "var(--up-text)", bg: "var(--up)" },
   Neutral: { color: "#8a6400", bg: "var(--warning)" },
   Watch: { color: "#8a6400", bg: "var(--warning)" },
   Bearish: { color: "var(--down)", bg: "var(--down)" },
   Sell: { color: "var(--down)", bg: "var(--down)" },
+  "Strong Sell": { color: "var(--down)", bg: "var(--down)" },
 };
 
 function CallBadge({ label, title }) {
@@ -243,10 +247,42 @@ function EmaValueCell({ price, ema, period, align = "center", showLabel = false 
   );
 }
 
-/** MACD(12,26,9) histogram sign. */
-function MacdBadge({ signal }) {
-  if (!signal || !signal.macdStatus) return <span className="text-xs text-ink-3">—</span>;
-  return <CallBadge label={signal.macdStatus} title={`MACD histogram ${signal.macdHist}`} />;
+/**
+ * MACD(12,26,9) vs. its Signal line, scored on the fixed 5-rung scale (see
+ * macdSignalRead in lib/technicals.js): a fresh crossover reads Strong
+ * Buy/Sell (±40), an already-established gap reads Bullish/Bearish (±25),
+ * and a flat MACD-equals-Signal reads Neutral (0). The score is shown
+ * alongside the label rather than buried in a tooltip.
+ */
+function MacdCell({ signal, align = "center", showLabel = false }) {
+  if (!signal || signal.macdScore === null || signal.macdScore === undefined) {
+    return <span className="text-xs text-ink-3">—</span>;
+  }
+  const style = CALL_STYLE[signal.macdLabel] ?? CALL_STYLE.Neutral;
+  const title = `MACD ${signal.macdLine ?? "n/a"} vs Signal ${
+    signal.macdSignalLine ?? "n/a"
+  } (histogram ${signal.macdHist ?? "n/a"})`;
+  return (
+    <span title={title} className={`inline-flex flex-col gap-0.5 ${ALIGN_CLASS[align] ?? "items-center"}`}>
+      {showLabel && (
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-3">MACD</span>
+      )}
+      <span className="font-mono text-[12px] tabular-nums text-ink">
+        {signal.macdScore > 0 ? "+" : ""}
+        {signal.macdScore}
+      </span>
+      <span
+        className="rounded px-1 py-px text-[9px] font-semibold tracking-wide"
+        style={{
+          color: style.color,
+          backgroundColor: `color-mix(in srgb, ${style.bg} 16%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${style.bg} 40%, transparent)`,
+        }}
+      >
+        {signal.macdLabel}
+      </span>
+    </span>
+  );
 }
 
 /**
@@ -258,7 +294,11 @@ function SignalBadge({ signal }) {
   if (!signal) return <span className="text-xs text-ink-3">—</span>;
   const title = `RSI(14) ${
     signal.rsi14 ?? "n/a"
-  } · EMA trend ${signal.emaTrend ?? "n/a"} · MACD ${signal.macdStatus ?? "n/a"} · Volume ${
+  } · EMA trend ${signal.emaTrend ?? "n/a"} · MACD ${signal.macdLabel ?? "n/a"} (${
+    signal.macdScore !== null && signal.macdScore !== undefined
+      ? (signal.macdScore > 0 ? "+" : "") + signal.macdScore
+      : "n/a"
+  }) · Volume ${
     signal.volumeRatio !== null ? `${signal.volumeRatio}× the 20-day average` : "n/a"
   }${signal.thinVolume ? " (thin — downgrades Buy/Sell to Watch)" : ""}`;
   return <CallBadge label={signal.signal} title={title} />;
@@ -471,6 +511,7 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
             align="start"
             showLabel
           />
+          <MacdCell signal={stock.signal} align="start" showLabel />
         </div>
       )}
       {stock.signal && (
@@ -597,7 +638,7 @@ export default function StocksTable({
                 </th>
                 <th
                   onClick={() => onSort("macd")}
-                  title="MACD(12,26,9) histogram sign"
+                  title="MACD(12,26,9) vs its Signal line: crossover ±40 (Strong Buy/Sell), above/below ±25 (Bullish/Bearish), equal 0 (Neutral)"
                   className={`${sortableCell} text-center`}
                 >
                   MACD
@@ -664,7 +705,7 @@ export default function StocksTable({
                       <EmaValueCell price={stock.price} ema={stock.signal?.ema50} period={50} />
                     </td>
                     <td className="px-2 py-2.5 text-center">
-                      <MacdBadge signal={stock.signal} />
+                      <MacdCell signal={stock.signal} />
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <SignalBadge signal={stock.signal} />
@@ -755,7 +796,7 @@ export default function StocksTable({
                   <span className="flex items-center gap-2.5">
                     <EmaValueCell price={stock.price} ema={stock.signal.ema20} period={20} align="end" />
                     <EmaValueCell price={stock.price} ema={stock.signal.ema50} period={50} align="end" />
-                    <MacdBadge signal={stock.signal} />
+                    <MacdCell signal={stock.signal} align="end" />
                   </span>
                   <SignalBadge signal={stock.signal} />
                 </div>
