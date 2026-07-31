@@ -117,6 +117,26 @@ function analysisSummary(a) {
 }
 
 /**
+ * Plain-language readout of the weighted confidence blend — see
+ * CONFIDENCE_WEIGHTS in lib/technicals.js for the six factors and their
+ * fixed percentage weights (RSI(5) 20%, Volume 18%, Price-to-Entry Delta
+ * 17%, EMA20 16.5%, MACD 16%, EMA50 12.5%). Each factor's vote runs -1
+ * (bearish) to +1 (bullish); MACD's is continuous (its score/40), every
+ * other factor is a discrete -1/0/+1 threshold read.
+ */
+function confidenceSummary(a) {
+  if (!a || !a.confidenceBreakdown) return "";
+  const parts = a.confidenceBreakdown.map((f) => {
+    const voteText =
+      f.vote === null || f.vote === undefined
+        ? "n/a"
+        : `${f.vote > 0 ? "+" : ""}${f.vote.toFixed(2)}`;
+    return `${f.label} ${f.weight}% (${voteText})`;
+  });
+  return `Weighted score ${a.confidenceScore ?? "n/a"} → ${a.confidence} confidence. ${parts.join(" · ")}`;
+}
+
+/**
  * Plain-language readout of the simple RSI+EMA+MACD+volume signal — the
  * expanded-row counterpart to analysisSummary above, which stays scoped to
  * the original Entry/Exit/Confidence factors.
@@ -146,7 +166,7 @@ function EntryExitCell({ value }) {
   );
 }
 
-function ConfidenceBadge({ analysis }) {
+function ConfidenceBadge({ analysis, align = "center" }) {
   if (!analysis) {
     return (
       <span className="text-xs text-ink-3" title={analysisSummary(null)}>
@@ -155,17 +175,29 @@ function ConfidenceBadge({ analysis }) {
     );
   }
   const style = CONFIDENCE_STYLE[analysis.confidence] ?? CONFIDENCE_STYLE.Low;
+  const title = `${confidenceSummary(analysis)}\n\n${analysisSummary(analysis)}`;
+  const score = analysis.confidenceScore;
   return (
     <span
-      title={analysisSummary(analysis)}
-      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide"
-      style={{
-        color: style.color,
-        backgroundColor: `color-mix(in srgb, ${style.bg} 16%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${style.bg} 40%, transparent)`,
-      }}
+      title={title}
+      className={`inline-flex flex-col gap-0.5 ${ALIGN_CLASS[align] ?? "items-center"}`}
     >
-      {analysis.confidence}
+      {score !== null && score !== undefined && (
+        <span className="font-mono text-[12px] tabular-nums text-ink">
+          {score > 0 ? "+" : ""}
+          {score}
+        </span>
+      )}
+      <span
+        className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide"
+        style={{
+          color: style.color,
+          backgroundColor: `color-mix(in srgb, ${style.bg} 16%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${style.bg} 40%, transparent)`,
+        }}
+      >
+        {analysis.confidence}
+      </span>
     </span>
   );
 }
