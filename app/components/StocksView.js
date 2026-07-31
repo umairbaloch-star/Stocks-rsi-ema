@@ -119,10 +119,14 @@ export default function StocksView({
   const sorted = useMemo(() => {
     const copy = [...filtered];
     const CONFIDENCE_RANK = { High: 3, Medium: 2, Low: 1 };
+    const CALL_RANK = { Bullish: 3, Buy: 3, Neutral: 2, Watch: 2, Bearish: 1, Sell: 1 };
     const value = (s) => {
       if (sortKey === "rsi") return s.rsi?.[period]?.[interval.key] ?? null;
       if (sortKey === "entry") return s.analysis?.entry ?? null;
       if (sortKey === "confidence") return CONFIDENCE_RANK[s.analysis?.confidence] ?? null;
+      if (sortKey === "emaTrend") return CALL_RANK[s.signal?.emaTrend] ?? null;
+      if (sortKey === "macd") return CALL_RANK[s.signal?.macdStatus] ?? null;
+      if (sortKey === "signal") return CALL_RANK[s.signal?.signal] ?? null;
       return s[sortKey];
     };
     copy.sort((a, b) => {
