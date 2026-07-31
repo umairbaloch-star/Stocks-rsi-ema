@@ -8,7 +8,7 @@ function tradingViewUrl(symbol) {
   return `https://www.tradingview.com/chart/?symbol=PSX:${encodeURIComponent(symbol)}`;
 }
 
-const COLUMN_COUNT = 6; // star, symbol, name, price, RSI, volume
+const COLUMN_COUNT = 10; // star, symbol, name, price, RSI, volume, entry, exit-today, exit-1to3w, confidence
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -85,6 +85,68 @@ function formatVolume(value) {
   if (value >= 1e6) return (value / 1e6).toFixed(2) + "M";
   if (value >= 1e3) return (value / 1e3).toFixed(1) + "K";
   return String(value);
+}
+
+const CONFIDENCE_STYLE = {
+  High: { color: "var(--up-text)", bg: "var(--up)" },
+  Medium: { color: "#8a6400", bg: "var(--warning)" },
+  Low: { color: "var(--ink-3)", bg: "var(--ink-3)" },
+};
+
+/**
+ * Plain-language readout of the factors behind an entry/exit/confidence
+ * call — used as the badge's tooltip and repeated in the expanded row so
+ * the "why" is never more than a click away.
+ */
+function analysisSummary(a) {
+  if (!a) return "Not enough price history yet for a technical read (needs 30+ trading days).";
+  const f = a.factors;
+  const parts = [
+    `RSI(14) ${f.rsi14 ?? "—"}, RSI(5) ${f.rsi5 ?? "—"}`,
+    `MACD histogram ${f.macdHist ?? "—"} (${f.macdHist > 0 ? "bullish" : f.macdHist < 0 ? "bearish" : "flat"})`,
+    `MAs: 20d ${f.sma20 ?? "—"}, 50d ${f.sma50 ?? "n/a"}, 200d ${f.sma200 ?? "n/a"}`,
+    `Volume ${f.volumeRatio !== null ? `${f.volumeRatio}× the 20-day average` : "n/a"}`,
+    `Support ~${f.support}, resistance ~${f.resistance} (approximated from closing prices — PSX's feed has no intraday high/low)`,
+    `Trend ${f.trend}`,
+    `${f.breakout === "none" ? "No breakout/breakdown confirmed" : f.breakout === "breakout" ? "Breakout above resistance, volume-confirmed" : "Breakdown below support, volume-confirmed"}`,
+    f.candlestick ? `${f.candlestick} on the last candle` : "No notable candlestick pattern",
+  ];
+  return parts.join(" · ");
+}
+
+function EntryExitCell({ value }) {
+  if (value === null || value === undefined) {
+    return <span className="text-sm text-ink-3">—</span>;
+  }
+  return (
+    <span className="font-mono text-[13px] tabular-nums text-ink">
+      {formatPrice(value)}
+    </span>
+  );
+}
+
+function ConfidenceBadge({ analysis }) {
+  if (!analysis) {
+    return (
+      <span className="text-xs text-ink-3" title={analysisSummary(null)}>
+        —
+      </span>
+    );
+  }
+  const style = CONFIDENCE_STYLE[analysis.confidence] ?? CONFIDENCE_STYLE.Low;
+  return (
+    <span
+      title={analysisSummary(analysis)}
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide"
+      style={{
+        color: style.color,
+        backgroundColor: `color-mix(in srgb, ${style.bg} 16%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${style.bg} 40%, transparent)`,
+      }}
+    >
+      {analysis.confidence}
+    </span>
+  );
 }
 
 function SortIndicator({ active, dir }) {
@@ -270,6 +332,16 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
           RSI(2) ≥ 90 · take-profit / avoid fresh entries.
         </p>
       )}
+      {stock.analysis && (
+        <p className="mb-1.5 text-[11px] text-ink-3">
+          <span className="font-semibold text-ink-2">
+            Entry ~{formatPrice(stock.analysis.entry)} · Exit today ~
+            {formatPrice(stock.analysis.exitSameDay)} · Exit 1–3w ~
+            {formatPrice(stock.analysis.exitShortTerm)} · {stock.analysis.confidence} confidence.
+          </span>{" "}
+          {analysisSummary(stock.analysis)}
+        </p>
+      )}
       {failed ? (
         <p className="py-4 text-sm text-ink-3">Couldn&apos;t load the RSI trend — try again.</p>
       ) : history === null ? (
@@ -305,16 +377,24 @@ export default function StocksTable({
       {/* Desktop / tablet: fixed-width table, sized to never need horizontal
           scroll, with a sticky header inside a scrollable body so long pages
           (e.g. 100 rows) keep the column headers in view. */}
+      {/* Ten columns no longer fit without horizontal scroll on anything
+          narrower than a wide desktop, so the wrapper now scrolls on X too
+          — the table gets a min-width and the sticky header scrolls with it
+          (still sticky on Y within the same container). */}
       <div className="hidden overflow-hidden rounded-xl border border-hairline bg-surface shadow-sm sm:block">
-        <div className="max-h-[70vh] overflow-y-auto">
-          <table className="w-full table-fixed text-xs md:text-sm">
+        <div className="max-h-[70vh] overflow-auto">
+          <table className="w-full min-w-[980px] table-fixed text-xs md:text-sm">
             <colgroup>
               <col style={{ width: "4%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "34%" }} />
-              <col style={{ width: "12%" }} />
-              <col style={{ width: "17%" }} />
-              <col style={{ width: "20%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "16%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <tr className="border-b border-grid">
@@ -343,6 +423,34 @@ export default function StocksTable({
                 >
                   Volume
                   <SortIndicator active={sortKey === "volume"} dir={sortDir} />
+                </th>
+                <th
+                  onClick={() => onSort("entry")}
+                  title="Ideal swing entry, from support/trend/RSI (see the expanded row for the full breakdown)"
+                  className={`${sortableCell} text-right`}
+                >
+                  Entry
+                  <SortIndicator active={sortKey === "entry"} dir={sortDir} />
+                </th>
+                <th
+                  title="Same-day exit target"
+                  className={`${headerCell} text-right`}
+                >
+                  Exit · today
+                </th>
+                <th
+                  title="Short-term (1-3 week) swing exit target"
+                  className={`${headerCell} text-right`}
+                >
+                  Exit · 1-3w
+                </th>
+                <th
+                  onClick={() => onSort("confidence")}
+                  title="How strongly RSI, MACD, moving averages, volume, support/resistance, trend, breakout, and candlestick reads agree — see the expanded row for the breakdown"
+                  className={`${sortableCell} text-center`}
+                >
+                  Confidence
+                  <SortIndicator active={sortKey === "confidence"} dir={sortDir} />
                 </th>
               </tr>
             </thead>
@@ -383,6 +491,18 @@ export default function StocksTable({
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-[13px] tabular-nums text-ink-3">
                       {formatVolume(stock.volume)}
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <EntryExitCell value={stock.analysis?.entry} />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <EntryExitCell value={stock.analysis?.exitSameDay} />
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      <EntryExitCell value={stock.analysis?.exitShortTerm} />
+                    </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <ConfidenceBadge analysis={stock.analysis} />
                     </td>
                   </tr>
                   {expandedSymbol === stock.symbol && (
@@ -457,6 +577,22 @@ export default function StocksTable({
                   align="end"
                 />
               </div>
+              {stock.analysis && (
+                <div className="flex items-center justify-between gap-2 border-t border-hairline/60 px-3 py-2 text-xs">
+                  <span className="text-ink-3">
+                    Entry <span className="font-mono text-ink-2">{formatPrice(stock.analysis.entry)}</span>
+                    {" · "}Exit{" "}
+                    <span className="font-mono text-ink-2">
+                      {formatPrice(stock.analysis.exitSameDay)}
+                    </span>
+                    {" / "}
+                    <span className="font-mono text-ink-2">
+                      {formatPrice(stock.analysis.exitShortTerm)}
+                    </span>
+                  </span>
+                  <ConfidenceBadge analysis={stock.analysis} />
+                </div>
+              )}
             </div>
             {expandedSymbol === stock.symbol && (
               <div className="border-t border-hairline bg-page/60 px-3 py-2">

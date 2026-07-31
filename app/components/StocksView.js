@@ -118,9 +118,16 @@ export default function StocksView({
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
+    const CONFIDENCE_RANK = { High: 3, Medium: 2, Low: 1 };
+    const value = (s) => {
+      if (sortKey === "rsi") return s.rsi?.[period]?.[interval.key] ?? null;
+      if (sortKey === "entry") return s.analysis?.entry ?? null;
+      if (sortKey === "confidence") return CONFIDENCE_RANK[s.analysis?.confidence] ?? null;
+      return s[sortKey];
+    };
     copy.sort((a, b) => {
-      const av = sortKey === "rsi" ? (a.rsi?.[period]?.[interval.key] ?? null) : a[sortKey];
-      const bv = sortKey === "rsi" ? (b.rsi?.[period]?.[interval.key] ?? null) : b[sortKey];
+      const av = value(a);
+      const bv = value(b);
       if (av === null || av === undefined) return 1;
       if (bv === null || bv === undefined) return -1;
       if (typeof av === "string") {
