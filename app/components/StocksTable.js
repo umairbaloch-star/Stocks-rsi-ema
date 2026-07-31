@@ -173,6 +173,22 @@ function BuySignalTag() {
   );
 }
 
+function SellSignalTag() {
+  return (
+    <span
+      title={`Swing take-profit / avoid-entry setup (${SIGNAL_RULE}): daily RSI(14) ≥ 65 and RSI(2) ≥ 90.`}
+      className="ml-1.5 rounded px-1 py-px align-middle text-[9px] font-semibold tracking-wide"
+      style={{
+        color: "var(--down)",
+        backgroundColor: "color-mix(in srgb, var(--down) 14%, transparent)",
+        border: "1px solid color-mix(in srgb, var(--down) 35%, transparent)",
+      }}
+    >
+      SELL
+    </span>
+  );
+}
+
 function StarButton({ starred, onToggle, symbol }) {
   return (
     <button
@@ -246,6 +262,12 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
         <p className="mb-1.5 text-[11px] text-ink-3">
           Screener buy signal also active ({SIGNAL_RULE}): entry daily RSI(14) ≤ 35 &amp;
           RSI(2) ≤ 10 · {EXIT_PLAN}.
+        </p>
+      )}
+      {stock.sellSignal && (
+        <p className="mb-1.5 text-[11px] text-ink-3">
+          Screener sell signal also active ({SIGNAL_RULE}): daily RSI(14) ≥ 65 &amp;
+          RSI(2) ≥ 90 · take-profit / avoid fresh entries.
         </p>
       )}
       {failed ? (
@@ -344,6 +366,7 @@ export default function StocksTable({
                       {stock.symbol}
                       {stock.isKse100 && <Kse100Tag />}
                       {stock.buySignal && <BuySignalTag />}
+                      {stock.sellSignal && <SellSignalTag />}
                     </td>
                     <td
                       className="truncate px-3 py-2.5 text-ink-2"
@@ -410,7 +433,8 @@ export default function StocksTable({
                     <div className="truncate font-semibold text-ink">
                       {stock.symbol}
                       {stock.isKse100 && <Kse100Tag />}
-                      {stock.buySignal && <BuySignalTag />}{" "}
+                      {stock.buySignal && <BuySignalTag />}
+                      {stock.sellSignal && <SellSignalTag />}{" "}
                       <span className="text-xs font-normal text-ink-3">{stock.name}</span>
                     </div>
                     <div className="truncate text-xs text-ink-3">{stock.sector}</div>

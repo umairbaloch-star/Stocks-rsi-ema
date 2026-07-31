@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import StocksTable from "./StocksTable";
 import MarketSummary from "./MarketSummary";
-import { RSI_INTERVALS, RSI_PERIODS, BUY_SIGNAL } from "@/lib/rsi";
+import { RSI_INTERVALS, RSI_PERIODS, BUY_SIGNAL, SELL_SIGNAL } from "@/lib/rsi";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
@@ -13,6 +13,7 @@ const DEFAULT_PERIOD = 14;
 const FILTERS = [
   { key: "all", label: "All" },
   { key: "signals", label: "Buy signals" },
+  { key: "sellSignals", label: "Sell signals" },
   { key: "oversold", label: "Oversold" },
   { key: "overbought", label: "Overbought" },
   { key: "kse100", label: "KSE-100" },
@@ -104,6 +105,7 @@ export default function StocksView({
       }
       const v = s.rsi?.[period]?.[interval.key];
       if (quickFilter === "signals") return Boolean(s.buySignal);
+      if (quickFilter === "sellSignals") return Boolean(s.sellSignal);
       if (quickFilter === "oversold")
         return v !== null && v !== undefined && v <= thresholds.oversold;
       if (quickFilter === "overbought")
@@ -212,11 +214,13 @@ export default function StocksView({
               const hint =
                 f.key === "signals"
                   ? `Swing-entry setups: daily RSI(14) ≤ ${BUY_SIGNAL.rsi14Max} and RSI(2) ≤ ${BUY_SIGNAL.rsi2Max}. Exit: RSI(14) back above ~50, +5–8%, or ~10 sessions.`
-                  : f.key === "oversold"
-                    ? `RSI(${period}) ≤ ${thresholds.oversold} on ${interval.label} candles`
-                    : f.key === "overbought"
-                      ? `RSI(${period}) ≥ ${thresholds.overbought} on ${interval.label} candles`
-                      : undefined;
+                  : f.key === "sellSignals"
+                    ? `Swing take-profit / avoid-entry setups: daily RSI(14) ≥ ${SELL_SIGNAL.rsi14Min} and RSI(2) ≥ ${SELL_SIGNAL.rsi2Min}.`
+                    : f.key === "oversold"
+                      ? `RSI(${period}) ≤ ${thresholds.oversold} on ${interval.label} candles`
+                      : f.key === "overbought"
+                        ? `RSI(${period}) ≥ ${thresholds.overbought} on ${interval.label} candles`
+                        : undefined;
               const active = quickFilter === f.key;
               return (
                 <button
