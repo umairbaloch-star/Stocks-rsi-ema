@@ -16,7 +16,10 @@ export async function GET(request) {
     if (params.get("refresh") === "1") {
       await refreshLivePrices();
     }
-    const data = await getStockData(params.get("scope") === "all");
+    // Optional client-chosen volume floor, tighter than the server default
+    // (see VOLUME_FILTER_PRESETS / getStockData in lib/cache.js).
+    const minVolume = Number(params.get("minVolume"));
+    const data = await getStockData(params.get("scope") === "all", minVolume);
     return NextResponse.json(data);
   } catch (err) {
     return NextResponse.json(
