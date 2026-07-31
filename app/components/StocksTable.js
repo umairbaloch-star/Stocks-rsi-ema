@@ -206,18 +206,28 @@ function emaSignalLabel(price, ema) {
   return "Neutral";
 }
 
-/** One EMA's value plus its own price-vs-EMA signal (independent of the other EMA). */
-function EmaValueCell({ price, ema, period, align = "center" }) {
+const ALIGN_CLASS = { center: "items-center", end: "items-end", start: "items-start" };
+
+/**
+ * One EMA's value plus its own price-vs-EMA signal (independent of the
+ * other EMA). `showLabel` prefixes "EMA20"/"EMA50" — used in the expanded
+ * row's panel where the two EMAs sit side by side without a column header
+ * to identify them.
+ */
+function EmaValueCell({ price, ema, period, align = "center", showLabel = false }) {
   if (ema === null || ema === undefined) return <span className="text-xs text-ink-3">—</span>;
   const label = emaSignalLabel(price, ema);
   const style = CALL_STYLE[label] ?? CALL_STYLE.Neutral;
   return (
     <span
       title={`EMA(${period}) ${ema} vs price ${price ?? "n/a"} — ${label ?? "n/a"}`}
-      className={`inline-flex flex-col gap-0.5 ${
-        align === "center" ? "items-center" : "items-end"
-      }`}
+      className={`inline-flex flex-col gap-0.5 ${ALIGN_CLASS[align] ?? "items-center"}`}
     >
+      {showLabel && (
+        <span className="text-[9px] font-semibold uppercase tracking-wide text-ink-3">
+          EMA{period}
+        </span>
+      )}
       <span className="font-mono text-[12px] tabular-nums text-ink">{formatPrice(ema)}</span>
       <span
         className="rounded px-1 py-px text-[9px] font-semibold tracking-wide"
@@ -440,12 +450,28 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
       {stock.analysis && (
         <p className="mb-1.5 text-[11px] text-ink-3">
           <span className="font-semibold text-ink-2">
-            Entry ~{formatPrice(stock.analysis.entry)} · Exit today ~
-            {formatPrice(stock.analysis.exitSameDay)} · Exit 1–3w ~
-            {formatPrice(stock.analysis.exitShortTerm)} · {stock.analysis.confidence} confidence.
+            Entry ~{formatPrice(stock.analysis.entry)} · {stock.analysis.confidence} confidence.
           </span>{" "}
           {analysisSummary(stock.analysis)}
         </p>
+      )}
+      {stock.signal && (
+        <div className="mb-1.5 flex items-center gap-4">
+          <EmaValueCell
+            price={stock.price}
+            ema={stock.signal.ema20}
+            period={20}
+            align="start"
+            showLabel
+          />
+          <EmaValueCell
+            price={stock.price}
+            ema={stock.signal.ema50}
+            period={50}
+            align="start"
+            showLabel
+          />
+        </div>
       )}
       {stock.signal && (
         <p className="mb-1.5 text-[11px] text-ink-3">
