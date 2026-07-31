@@ -8,9 +8,9 @@ function tradingViewUrl(symbol) {
   return `https://www.tradingview.com/chart/?symbol=PSX:${encodeURIComponent(symbol)}`;
 }
 
-// star, symbol, name, price, RSI, volume, entry, exit-today, exit-1to3w,
-// confidence, EMA trend, MACD, Signal
-const COLUMN_COUNT = 13;
+// star, symbol, name, price, RSI, volume, entry, confidence, EMA20, EMA50,
+// MACD, Signal
+const COLUMN_COUNT = 12;
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -198,14 +198,38 @@ function CallBadge({ label, title }) {
   );
 }
 
-/** EMA(20/50) trend: price and EMA20 and EMA50 all sloping the same way. */
-function EmaBadge({ signal }) {
-  if (!signal || !signal.emaTrend) return <span className="text-xs text-ink-3">—</span>;
+/** Price vs. a single EMA: above = Bullish, below = Bearish, equal = Neutral. */
+function emaSignalLabel(price, ema) {
+  if (price === null || price === undefined || ema === null || ema === undefined) return null;
+  if (price > ema) return "Bullish";
+  if (price < ema) return "Bearish";
+  return "Neutral";
+}
+
+/** One EMA's value plus its own price-vs-EMA signal (independent of the other EMA). */
+function EmaValueCell({ price, ema, period, align = "center" }) {
+  if (ema === null || ema === undefined) return <span className="text-xs text-ink-3">—</span>;
+  const label = emaSignalLabel(price, ema);
+  const style = CALL_STYLE[label] ?? CALL_STYLE.Neutral;
   return (
-    <CallBadge
-      label={signal.emaTrend}
-      title={`EMA20 ${signal.ema20 ?? "n/a"} · EMA50 ${signal.ema50 ?? "n/a"}`}
-    />
+    <span
+      title={`EMA(${period}) ${ema} vs price ${price ?? "n/a"} — ${label ?? "n/a"}`}
+      className={`inline-flex flex-col gap-0.5 ${
+        align === "center" ? "items-center" : "items-end"
+      }`}
+    >
+      <span className="font-mono text-[12px] tabular-nums text-ink">{formatPrice(ema)}</span>
+      <span
+        className="rounded px-1 py-px text-[9px] font-semibold tracking-wide"
+        style={{
+          color: style.color,
+          backgroundColor: `color-mix(in srgb, ${style.bg} 16%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${style.bg} 40%, transparent)`,
+        }}
+      >
+        {label ?? "—"}
+      </span>
+    </span>
   );
 }
 
@@ -478,11 +502,10 @@ export default function StocksTable({
               <col style={{ width: "6%" }} />
               <col style={{ width: "10%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "8%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "10%" }} />
             </colgroup>
@@ -523,18 +546,6 @@ export default function StocksTable({
                   <SortIndicator active={sortKey === "entry"} dir={sortDir} />
                 </th>
                 <th
-                  title="Same-day exit target"
-                  className={`${headerCell} text-right`}
-                >
-                  Exit · today
-                </th>
-                <th
-                  title="Short-term (1-3 week) swing exit target"
-                  className={`${headerCell} text-right`}
-                >
-                  Exit · 1-3w
-                </th>
-                <th
                   onClick={() => onSort("confidence")}
                   title="How strongly RSI, MACD, moving averages, volume, support/resistance, trend, breakout, and candlestick reads agree — see the expanded row for the breakdown"
                   className={`${sortableCell} text-center`}
@@ -543,12 +554,20 @@ export default function StocksTable({
                   <SortIndicator active={sortKey === "confidence"} dir={sortDir} />
                 </th>
                 <th
-                  onClick={() => onSort("emaTrend")}
-                  title="EMA(20/50) trend — price and both EMAs sloping the same way"
+                  onClick={() => onSort("ema20")}
+                  title="EMA(20) value and price-vs-EMA20 signal"
                   className={`${sortableCell} text-center`}
                 >
-                  EMA
-                  <SortIndicator active={sortKey === "emaTrend"} dir={sortDir} />
+                  EMA20
+                  <SortIndicator active={sortKey === "ema20"} dir={sortDir} />
+                </th>
+                <th
+                  onClick={() => onSort("ema50")}
+                  title="EMA(50) value and price-vs-EMA50 signal"
+                  className={`${sortableCell} text-center`}
+                >
+                  EMA50
+                  <SortIndicator active={sortKey === "ema50"} dir={sortDir} />
                 </th>
                 <th
                   onClick={() => onSort("macd")}
@@ -609,17 +628,14 @@ export default function StocksTable({
                     <td className="px-3 py-2.5 text-right">
                       <EntryExitCell value={stock.analysis?.entry} />
                     </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <EntryExitCell value={stock.analysis?.exitSameDay} />
-                    </td>
-                    <td className="px-3 py-2.5 text-right">
-                      <EntryExitCell value={stock.analysis?.exitShortTerm} />
-                    </td>
                     <td className="px-2 py-2.5 text-center">
                       <ConfidenceBadge analysis={stock.analysis} />
                     </td>
                     <td className="px-2 py-2.5 text-center">
-                      <EmaBadge signal={stock.signal} />
+                      <EmaValueCell price={stock.price} ema={stock.signal?.ema20} period={20} />
+                    </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <EmaValueCell price={stock.price} ema={stock.signal?.ema50} period={50} />
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <MacdBadge signal={stock.signal} />
@@ -704,22 +720,15 @@ export default function StocksTable({
                 <div className="flex items-center justify-between gap-2 border-t border-hairline/60 px-3 py-2 text-xs">
                   <span className="text-ink-3">
                     Entry <span className="font-mono text-ink-2">{formatPrice(stock.analysis.entry)}</span>
-                    {" · "}Exit{" "}
-                    <span className="font-mono text-ink-2">
-                      {formatPrice(stock.analysis.exitSameDay)}
-                    </span>
-                    {" / "}
-                    <span className="font-mono text-ink-2">
-                      {formatPrice(stock.analysis.exitShortTerm)}
-                    </span>
                   </span>
                   <ConfidenceBadge analysis={stock.analysis} />
                 </div>
               )}
               {stock.signal && (
                 <div className="flex items-center justify-between gap-1.5 border-t border-hairline/60 px-3 py-2 text-xs">
-                  <span className="flex items-center gap-1.5">
-                    <EmaBadge signal={stock.signal} />
+                  <span className="flex items-center gap-2.5">
+                    <EmaValueCell price={stock.price} ema={stock.signal.ema20} period={20} align="end" />
+                    <EmaValueCell price={stock.price} ema={stock.signal.ema50} period={50} align="end" />
                     <MacdBadge signal={stock.signal} />
                   </span>
                   <SignalBadge signal={stock.signal} />
