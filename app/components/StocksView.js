@@ -68,8 +68,18 @@ export default function StocksView({
   watchlist,
   onToggleWatch,
   emptyState = null,
+  // Uncontrolled by default (internal state) — the dashboard passes both
+  // props to lift search up to useStocks, so an exact symbol match can be
+  // fetched on demand and exempted from the server's volume floor (see
+  // ensureSearchSymbol in lib/cache.js). The watchlist page doesn't need
+  // that (everything it shows is already loaded), so it omits both and
+  // gets plain client-side filtering, same as before.
+  search: controlledSearch,
+  onSearchChange,
 }) {
-  const [search, setSearch] = useState("");
+  const [internalSearch, setInternalSearch] = useState("");
+  const search = controlledSearch ?? internalSearch;
+  const setSearch = onSearchChange ?? setInternalSearch;
   const [quickFilter, setQuickFilter] = useState("all");
   const [intervalKey, setIntervalKey] = useState(DEFAULT_INTERVAL);
   const [period, setPeriod] = useState(DEFAULT_PERIOD);

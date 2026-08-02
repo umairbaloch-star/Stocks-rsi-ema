@@ -9,6 +9,7 @@ import { useStocks, useWatchlist } from "./hooks";
 export default function Home() {
   const { symbols: watchlist, toggle: toggleWatch } = useWatchlist();
   const [minVolume, setMinVolume] = useState(0);
+  const [search, setSearch] = useState("");
   const {
     stocks,
     updatedAt,
@@ -27,7 +28,7 @@ export default function Home() {
     error,
     loadMore,
     refresh,
-  } = useStocks(watchlist, minVolume);
+  } = useStocks(watchlist, minVolume, search);
 
   const stillFilling = totalCount === 0 || loadedCount < totalCount;
   const fillPercent = totalCount > 0 ? Math.round((loadedCount / totalCount) * 100) : 0;
@@ -91,6 +92,8 @@ export default function Home() {
           usingFallback={usingFallback}
           watchlist={watchlist}
           onToggleWatch={toggleWatch}
+          search={search}
+          onSearchChange={setSearch}
         />
 
         {hasMore && (
