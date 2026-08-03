@@ -233,6 +233,53 @@ take months to round-trip 30→70, which doesn't match a 1–2 week hold.
       worth revisiting. **None of these candidates have been run against
       real data yet** — that's the next step before anything new ships.
 
+16. **First real backtest run of `scripts/backtest-features.mjs`: two
+    features clear the bar, five don't.** User ran it against 40 KSE-100
+    stocks (n=1,079 trades): `atrPct` (ATR(14) as a % of price) came back at
+    r=0.201 and `declineFrom20dHighPct` at r=0.124 — both meaningfully above
+    the noise floor. The other five (RSI depth ×2, distance from a 252-day
+    low, down-streak days, persistent-oversold-days, days-since-last-signal)
+    all sat at |r| < 0.06 — noise. Tercile-bucket breakdown for both
+    promising features showed their averages weren't outlier-driven (median
+    return was *higher* than the average in the top bucket for both,
+    meaning a broad majority of trades did well, not a couple of huge
+    winners skewing a mean) — `atrPct`'s top tercile: 70.6% win-rate,
+    +2.97% avg, +5.57% median vs. ~52-56%/~0% for the rest.
+
+17. **Confirmed on a second, larger, non-overlapping sample; quadrant
+    analysis showed `declineFrom20dHighPct` is redundant, `atrPct` isn't.**
+    Re-ran against 100 KSE-100 stocks (n=2,701 trades — 60 different names
+    than item 16's run): `atrPct`'s numbers barely moved (r=0.205, top
+    tercile 71.0% win-rate/+3.13% avg/+5.72% median) — the signature of a
+    real effect, not a sample-specific fluke. `declineFrom20dHighPct` also
+    improved to a clean monotonic bucket step-up (was non-monotonic on the
+    smaller sample — that was noise). Added a 4-quadrant breakdown (each
+    feature in its own top tercile or not) to check whether combining them
+    beats either alone: **"atrPct only" (high ATR, NOT also a big 20-day
+    decline) was the single best group of all** — 80.9% win-rate, +4.27%
+    avg — beating "both high" (68.2%/2.80%). Conclusion: `declineFrom20dHighPct`
+    was mostly riding on its overlap with `atrPct` (volatile stocks tend to
+    have fallen further too); once isolated, it adds nothing and can
+    slightly dilute `atrPct`'s signal. **Only `atrPct` is worth building on.**
+    - **Shipped**: `VOL_CONFIRM = { atrPctMin: 2 }` in `lib/rsi.js`,
+      `atrPct`/`volConfirmed` computed in `lib/cache.js`'s `computeRsiFields`
+      (daily candles only, same as `BUY_SIGNAL` — never resampled to the
+      viewed period/interval), and a "VOL" tag shown only alongside an
+      active BUY tag in `StocksTable.js` (never on its own — it's a
+      confirmation of `BUY_SIGNAL`, not an independent signal), plus a
+      "Vol-confirmed" quick filter and a market-summary tile.
+    - Unlike the item 13-15 confidence score, this one was verified against
+      real outcomes on two independent samples, checked for outlier-driven
+      skew (median vs. average), and checked for redundancy (quadrant
+      analysis) before shipping — the discipline the first attempt skipped.
+    - **Caveat carried forward, not yet closed**: every backtest so far used
+      only KSE-100 constituents (large, liquid names). The live screener
+      also flags non-KSE-100 stocks (subject to the liquidity floor). If
+      this is revisited, testing `atrPct` against the non-KSE-100 universe
+      (`--symbols` with a manually assembled list, or once
+      `backtest-features.mjs` grows a way to target the "rest" partition)
+      would close that gap.
+
 ## Standing gotchas (still true — don't rediscover these)
 
 - **This dev sandbox's IP is rate-limited/blocked by PSX** (`503` on

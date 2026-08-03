@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useState } from "react";
 import RSIChart from "./RSIChart";
 import { StarIcon } from "./TopBar";
-import { RSI_PERIODS } from "@/lib/rsi";
+import { RSI_PERIODS, VOL_CONFIRM } from "@/lib/rsi";
 function tradingViewUrl(symbol) {
   return `https://www.tradingview.com/chart/?symbol=PSX:${encodeURIComponent(symbol)}`;
 }
@@ -173,6 +173,27 @@ function BuySignalTag() {
   );
 }
 
+// Backtested confirmation of a BUY signal (see VOL_CONFIRM in lib/rsi.js
+// and docs/PROGRESS.md items 13-17) — a stock's volatility (ATR(14) as a %
+// of price) historically separated a 71-81% win-rate bucket from a ~52%
+// baseline across two independent real-data backtests. Only shown alongside
+// an active BUY tag; it's a confirmation layer, never a signal on its own.
+function VolConfirmedTag({ atrPct }) {
+  return (
+    <span
+      title={`Volatility-confirmed: ATR(14) is ${atrPct?.toFixed(1)}% of price (≥ ${VOL_CONFIRM.atrPctMin}%) — backtested to a 71-81% historical win-rate vs. ~52% for quieter BUY signals (scripts/backtest-features.mjs, docs/PROGRESS.md item 17).`}
+      className="ml-1.5 rounded px-1 py-px align-middle text-[9px] font-semibold tracking-wide"
+      style={{
+        color: "var(--accent)",
+        backgroundColor: "var(--accent-soft)",
+        border: "1px solid color-mix(in srgb, var(--accent) 35%, transparent)",
+      }}
+    >
+      VOL
+    </span>
+  );
+}
+
 function StarButton({ starred, onToggle, symbol }) {
   return (
     <button
@@ -246,6 +267,22 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
         <p className="mb-1.5 text-[11px] text-ink-3">
           Screener buy signal also active ({SIGNAL_RULE}): entry daily RSI(14) ≤ 35 &amp;
           RSI(2) ≤ 10 · {EXIT_PLAN}.
+        </p>
+      )}
+      {stock.buySignal && (
+        <p className="mb-1.5 text-[11px] text-ink-3">
+          {stock.volConfirmed ? (
+            <>
+              <strong style={{ color: "var(--accent)" }}>Volatility-confirmed</strong> — ATR(14) is{" "}
+              {stock.atrPct?.toFixed(1)}% of price (≥ {VOL_CONFIRM.atrPctMin}%), backtested to a
+              71–81% historical win-rate vs. ~52% for quieter BUY signals.
+            </>
+          ) : stock.atrPct !== null && stock.atrPct !== undefined ? (
+            <>
+              ATR(14) is only {stock.atrPct.toFixed(1)}% of price (below the {VOL_CONFIRM.atrPctMin}%
+              backtested confirmation threshold) — historically a weaker, quieter setup.
+            </>
+          ) : null}
         </p>
       )}
       {failed ? (
@@ -344,6 +381,7 @@ export default function StocksTable({
                       {stock.symbol}
                       {stock.isKse100 && <Kse100Tag />}
                       {stock.buySignal && <BuySignalTag />}
+                      {stock.buySignal && stock.volConfirmed && <VolConfirmedTag atrPct={stock.atrPct} />}
                     </td>
                     <td
                       className="truncate px-3 py-2.5 text-ink-2"
@@ -410,7 +448,8 @@ export default function StocksTable({
                     <div className="truncate font-semibold text-ink">
                       {stock.symbol}
                       {stock.isKse100 && <Kse100Tag />}
-                      {stock.buySignal && <BuySignalTag />}{" "}
+                      {stock.buySignal && <BuySignalTag />}
+                      {stock.buySignal && stock.volConfirmed && <VolConfirmedTag atrPct={stock.atrPct} />}{" "}
                       <span className="text-xs font-normal text-ink-3">{stock.name}</span>
                     </div>
                     <div className="truncate text-xs text-ink-3">{stock.sector}</div>

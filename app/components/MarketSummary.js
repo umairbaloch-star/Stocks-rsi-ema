@@ -1,6 +1,6 @@
 "use client";
 
-import { BUY_SIGNAL } from "@/lib/rsi";
+import { BUY_SIGNAL, VOL_CONFIRM } from "@/lib/rsi";
 
 function Stat({ label, value, dot, hint }) {
   return (
@@ -38,6 +38,7 @@ export default function MarketSummary({ stocks, period, interval, thresholds }) 
   const oversold = withRsi.filter((s) => value(s) <= thresholds.oversold).length;
   const neutral = withRsi.length - overbought - oversold;
   const signals = stocks.filter((s) => s.buySignal).length;
+  const volConfirmedSignals = stocks.filter((s) => s.buySignal && s.volConfirmed).length;
 
   const denom = oversold + neutral + overbought;
   const segments = [
@@ -57,6 +58,12 @@ export default function MarketSummary({ stocks, period, interval, thresholds }) 
           value={signals}
           dot="var(--accent)"
           hint={`RSI(14) ≤ ${BUY_SIGNAL.rsi14Max} & RSI(2) ≤ ${BUY_SIGNAL.rsi2Max} · daily`}
+        />
+        <Stat
+          label="Vol-confirmed"
+          value={volConfirmedSignals}
+          dot="var(--accent)"
+          hint={`Buy signals with ATR(14) ≥ ${VOL_CONFIRM.atrPctMin}% of price · backtested 71-81% win-rate`}
         />
         <Stat
           label="Oversold"

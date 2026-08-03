@@ -26,6 +26,15 @@ list entirely by default — see [Liquidity floor](#liquidity-floor) below.
   *daily* RSI(14) ≤ 35 (genuinely beaten down) **and** daily RSI(2) ≤ 10
   (short-term stretched right now). Exit plan: daily RSI(14) recrosses ~50,
   or +5–8% profit, or ~10 sessions pass — whichever comes first.
+- **Volatility confirmation** — a **VOL** tag next to BUY, backed by a real
+  backtest (`docs/PROGRESS.md` items 13-17), not theory: BUY signals where
+  ATR(14) is ≥ 2% of price (`VOL_CONFIRM` in `lib/rsi.js`) historically had a
+  71–81% win-rate across two independent samples (n=1,079 and n=2,701 real
+  trades), vs. ~52% for quieter BUY signals — a quiet "oversold" reading is
+  more often a stock that just isn't trading much than a real dip worth
+  buying. It's a confirmation layer, shown only alongside an active BUY tag,
+  never a signal on its own — see
+  [Researching new indicators](#researching-new-indicators-for-the-screener).
 - **Dynamic per-row insight** — expanding a row shows a live reading of
   *whatever* RSI you're currently viewing (selected period × interval), with
   zone-appropriate advice (dip-entry plan, "approaching oversold", take-profit
@@ -121,12 +130,16 @@ sustained load. That's an infrastructure fact, not a bug in this code.
   - `RSI_INTERVALS` — the 9 selectable chart intervals.
   - `BUY_SIGNAL` — the fixed screener thresholds (`rsi14Max: 35`,
     `rsi2Max: 10`).
+  - `VOL_CONFIRM` — the backtested BUY_SIGNAL confirmation threshold
+    (`atrPctMin: 2`) behind the VOL tag; see `docs/PROGRESS.md` items 13-17
+    for the full backtest history that justified it.
 - **`lib/indicators.js`** — pure calculation, no I/O: general-purpose
   daily-candle building blocks (`calculateSMA`/`calculateEMA`,
   `calculateMACD` (12,26,9), `calculateCloseATR` — a close-to-close
-  volatility **proxy**, not true ATR, since PSX's EOD feed has no high/low)
-  used only by `scripts/backtest-features.mjs` for indicator research — not
-  currently wired into the live app (see
+  volatility **proxy**, not true ATR, since PSX's EOD feed has no high/low).
+  Only `calculateCloseATR` is currently wired into the live app (via
+  `VOL_CONFIRM`'s `atrPct`, computed in `lib/cache.js`); the rest remain
+  research building blocks for `scripts/backtest-features.mjs` (see
   [Researching new indicators](#researching-new-indicators-for-the-screener)
   below for why).
 - **`lib/cache.js`** — server-side in-memory state (needs a long-lived
@@ -234,6 +247,18 @@ positive correlation on a large sample here** — not before. Don't wire a new
 indicator into `lib/cache.js`/the UI on theory alone; run it through this
 script against real data first, the same discipline that caught the
 confidence score's null result.
+
+**One candidate has cleared that bar so far**: `atrPct` (ATR(14) as a % of
+price) — confirmed on two independent samples (n=1,079 and n=2,701 real
+trades), its top-tercile bucket wasn't outlier-driven (median return exceeded
+the average, meaning a broad majority of trades did well, not a couple of
+huge winners), and a quadrant analysis confirmed it isn't redundant with the
+other candidate that initially looked promising (`declineFrom20dHighPct`,
+which turned out to just be riding on its overlap with `atrPct`). It now
+ships as the **VOL** confirmation tag (`VOL_CONFIRM` in `lib/rsi.js`) — see
+`docs/PROGRESS.md` items 16-17 for the full backtest history. **Caveat**:
+every run so far used only KSE-100 constituents; it hasn't been checked
+against the non-KSE-100 "rest" of the market the live screener also covers.
 
 ## Deploying on Render (free tier)
 
