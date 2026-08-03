@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchSymbols, fetchMarketWatch, fetchEodSeries } from "@/lib/psx";
 import { calculateRSISeries, adjustForCorporateActions } from "@/lib/rsi";
-import { computeSimpleSignal } from "@/lib/technicals";
+import { computeSimpleSignal, computeTradeAnalysis } from "@/lib/technicals";
 
 const CONCURRENCY = 6; // gentler than the main cache's fetch — this is an on-demand, ad-hoc run
 const DEFAULT_HOLD_DAYS = [5, 10, 15]; // ~1, 2, 3 trading weeks
@@ -52,6 +52,25 @@ function summarize(bucketsByCall) {
   return out;
 }
 
+// Records into `diag[dimension][key]`, a bucketsByCall structure (same
+// shape recordOutcome/summarize already handle) — e.g. diag.trend.up.Sell.
+function recordDiag(diag, dimension, key, callType, holdKey, ret) {
+  diag[dimension] ??= {};
+  diag[dimension][key] ??= {};
+  recordOutcome(diag[dimension][key], callType, holdKey, ret);
+}
+
+function summarizeDiag(diag) {
+  const out = {};
+  for (const [dimension, byKey] of Object.entries(diag)) {
+    out[dimension] = {};
+    for (const [key, buckets] of Object.entries(byKey)) {
+      out[dimension][key] = summarize(buckets);
+    }
+  }
+  return out;
+}
+
 /**
  * Backtests the live Buy/Sell/Watch rule (computeSimpleSignal in
  * lib/technicals.js) against real historical closes: at every past trading
@@ -70,6 +89,13 @@ function summarize(bucketsByCall) {
  *   scope     "core" (KSE-100, default) | "all" (every equity — slow)
  *   limit     max symbols to test (default 40, ignored when `symbols` is set)
  *   hold      comma-separated trading-day windows (default "5,10,15" ~ 1-3 weeks)
+ *   diagnose  "1" to also bucket outcomes by broader trend context (up/down/
+ *             sideways, from computeTradeAnalysis), MACD label (fresh
+ *             crossover vs. established gap), and vote unanimity (2-of-3 vs.
+ *             3-of-3) — and report each tested symbol's own buy-and-hold
+ *             drift over the window, to separate "the rule is wrong" from
+ *             "the rule was fighting a trending market." Off by default —
+ *             it roughly doubles the per-signal-day work.
  */
 export async function GET(request) {
   try {
@@ -81,6 +107,7 @@ export async function GET(request) {
     if (holdDays.length === 0) holdDays.push(...DEFAULT_HOLD_DAYS);
     const maxHold = Math.max(...holdDays);
     const limit = Number(params.get("limit")) > 0 ? Number(params.get("limit")) : DEFAULT_LIMIT;
+    const diagnose = params.get("diagnose") === "1";
 
     let symbols;
     const symbolsParam = params.get("symbols");
@@ -103,7 +130,9 @@ export async function GET(request) {
 
     const current = {};
     const baseline = {};
+    const diag = {}; // trend / macdLabel / voteMargin, current-signal only — see recordDiag
     const perSymbol = [];
+    const marketDrift = [];
     let failedSymbols = 0;
 
     await runWithConcurrency(symbols, CONCURRENCY, async (symbol) => {
@@ -120,9 +149,10 @@ export async function GET(request) {
       const closes = adjusted.map((p) => p.close);
       const rsi14Series = calculateRSISeries(closes, 14);
       const rsi5Series = calculateRSISeries(closes, 5);
+      const windowEnd = adjusted.length - maxHold;
 
       let symbolSignals = 0;
-      for (let i = WARMUP_DAYS; i < adjusted.length - maxHold; i++) {
+      for (let i = WARMUP_DAYS; i < windowEnd; i++) {
         const r14 = rsi14Series[i];
         const r5 = rsi5Series[i];
         if (r14 === null || r5 === null) continue;
@@ -132,6 +162,17 @@ export async function GET(request) {
         if (!sig) continue;
         if (sig.signal === "Watch" && sig.preExtendedSignal === "Watch") continue;
 
+        // Only computed for an actual signal day (not every day in the
+        // window), to keep the diagnostic pass cheap relative to the main
+        // scan — reuses the same causal slice, so still zero lookahead.
+        const trend = diagnose && sig.signal !== "Watch"
+          ? computeTradeAnalysis(sub, r14, r5)?.factors?.trend ?? "unknown"
+          : null;
+        const rsi14Vote = r14 <= 35 ? 1 : r14 >= 65 ? -1 : 0;
+        const emaVote = sig.emaTrend === "Bullish" ? 1 : sig.emaTrend === "Bearish" ? -1 : 0;
+        const macdVote = sig.macdScore > 0 ? 1 : sig.macdScore < 0 ? -1 : 0;
+        const voteMargin = Math.abs(rsi14Vote + emaVote + macdVote);
+
         const entryPrice = adjusted[i].close;
         symbolSignals++;
         for (const hold of holdDays) {
@@ -140,12 +181,22 @@ export async function GET(request) {
           const ret = (futurePrice - entryPrice) / entryPrice;
           recordOutcome(current, sig.signal, holdKey, ret);
           recordOutcome(baseline, sig.preExtendedSignal, holdKey, ret);
+          if (diagnose && sig.signal !== "Watch") {
+            recordDiag(diag, "trend", trend, sig.signal, holdKey, ret);
+            recordDiag(diag, "macdLabel", sig.macdLabel ?? "unknown", sig.signal, holdKey, ret);
+            recordDiag(diag, "voteMargin", `${voteMargin}of3`, sig.signal, holdKey, ret);
+          }
         }
       }
-      perSymbol.push({ symbol, daysTested: adjusted.length - maxHold - WARMUP_DAYS, signalDays: symbolSignals });
+      perSymbol.push({ symbol, daysTested: windowEnd - WARMUP_DAYS, signalDays: symbolSignals });
+      if (diagnose) {
+        const startClose = adjusted[WARMUP_DAYS].close;
+        const endClose = adjusted[adjusted.length - 1].close;
+        marketDrift.push({ symbol, totalReturnPct: Number((((endClose - startClose) / startClose) * 100).toFixed(1)) });
+      }
     });
 
-    return NextResponse.json({
+    const response = {
       symbolsRequested: symbols.length,
       symbolsTested: perSymbol.length,
       failedSymbols,
@@ -156,7 +207,33 @@ export async function GET(request) {
       // days, so the two summaries are a direct before/after comparison.
       baseline: summarize(baseline),
       perSymbol,
-    });
+    };
+
+    if (diagnose) {
+      const returns = marketDrift.map((m) => m.totalReturnPct).sort((a, b) => a - b);
+      const avg = returns.length ? returns.reduce((a, b) => a + b, 0) / returns.length : null;
+      const median = returns.length ? returns[Math.floor(returns.length / 2)] : null;
+      const pctUp = returns.length
+        ? Number(((returns.filter((r) => r > 0).length / returns.length) * 100).toFixed(1))
+        : null;
+      response.diagnostics = {
+        // Buy-and-hold drift of the tested symbols over the same window —
+        // context for whether Sell is "wrong" or just fighting a trending
+        // tape. A strongly positive market here makes counter-trend Sells
+        // structurally harder to validate, independent of rule quality.
+        marketDrift: {
+          avgTotalReturnPct: avg !== null ? Number(avg.toFixed(1)) : null,
+          medianTotalReturnPct: median,
+          pctSymbolsUp: pctUp,
+        },
+        // Buckets of the CURRENT rule's Buy/Sell outcomes by broader trend
+        // context (analysis.factors.trend), MACD label at signal time, and
+        // whether all 3 votes agreed (3of3) or just 2 of 3 (2of3).
+        byBucket: summarizeDiag(diag),
+      };
+    }
+
+    return NextResponse.json(response);
   } catch (err) {
     return NextResponse.json(
       { error: err.message || "Backtest failed" },
