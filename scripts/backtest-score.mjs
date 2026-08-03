@@ -138,10 +138,68 @@ async function backtestSymbol(symbol, results) {
       prevMacdHistogram: macd.histogram[i - 1],
     });
     const score = composite ? composite.score : null;
+    const breakdown = composite ? composite.breakdown : {};
 
     const trade = simulateTrade(closes, rsi14, i);
-    results.push({ symbol, score, ...trade });
+    results.push({ symbol, score, breakdown, ...trade });
   }
+}
+
+/** Pearson correlation coefficient between two equal-length numeric arrays. */
+function correlation(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return null;
+  const meanX = xs.reduce((a, b) => a + b, 0) / n;
+  const meanY = ys.reduce((a, b) => a + b, 0) / n;
+  let cov = 0;
+  let varX = 0;
+  let varY = 0;
+  for (let i = 0; i < n; i++) {
+    const dx = xs[i] - meanX;
+    const dy = ys[i] - meanY;
+    cov += dx * dy;
+    varX += dx * dx;
+    varY += dy * dy;
+  }
+  if (varX === 0 || varY === 0) return null;
+  return cov / Math.sqrt(varX * varY);
+}
+
+/**
+ * Correlates the overall score and each of its four components against the
+ * trade's actual forward return, across every trade that has that
+ * component. A component with a correlation near 0 is carrying no real
+ * signal and is just adding noise to the weighted total; only a
+ * consistently positive correlation across a decent sample justifies its
+ * weight in SCORE_WEIGHTS.
+ */
+function reportCorrelations(results) {
+  console.log("\n== Correlation of score / component vs. actual forward return ==");
+  const withScore = results.filter((r) => r.score !== null);
+  const scoreCorr = correlation(
+    withScore.map((r) => r.score),
+    withScore.map((r) => r.return)
+  );
+  console.log(
+    `${"overall score".padEnd(16)} n=${String(withScore.length).padEnd(5)} r=${scoreCorr === null ? "n/a" : scoreCorr.toFixed(3)}`
+  );
+
+  for (const key of ["rsi", "trend", "volume", "macd"]) {
+    const withKey = results.filter((r) => r.breakdown && r.breakdown[key] !== undefined);
+    const corr = correlation(
+      withKey.map((r) => r.breakdown[key]),
+      withKey.map((r) => r.return)
+    );
+    console.log(
+      `${key.padEnd(16)} n=${String(withKey.length).padEnd(5)} r=${corr === null ? "n/a" : corr.toFixed(3)}`
+    );
+  }
+  console.log(
+    "\nPearson r ranges -1..+1. Near 0 = no linear relationship with forward return\n" +
+      "(the component isn't predictive here); positive = higher component score tends\n" +
+      "to precede better returns; negative = the opposite of what's intended. A weight\n" +
+      "in SCORE_WEIGHTS is only justified by a consistently positive r on a large sample."
+  );
 }
 
 function summarize(results) {
@@ -178,6 +236,8 @@ function summarize(results) {
       "enough sample, the score isn't adding predictive value beyond the RSI screener\n" +
       "alone, and the weights (lib/indicators.js SCORE_WEIGHTS) should be revisited."
   );
+
+  reportCorrelations(results);
 }
 
 async function main() {
