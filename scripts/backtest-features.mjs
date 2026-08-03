@@ -219,6 +219,39 @@ function reportFeatureCorrelations(results) {
   );
 }
 
+/**
+ * Splits trades into `n` equal-sized buckets by a feature's value (low to
+ * high) and reports win-rate/avg-return per bucket. A correlation
+ * coefficient can be dragged around by a handful of outlier trades; a
+ * roughly monotonic step-up in win-rate/avg-return across buckets is
+ * stronger evidence that a feature is genuinely predictive than the
+ * correlation number alone.
+ */
+function reportFeatureBuckets(results, key, n = 3) {
+  const withKey = results.filter((r) => r.features[key] !== null && r.features[key] !== undefined);
+  if (withKey.length < n * 10) {
+    console.log(`\n${key}: not enough trades (n=${withKey.length}) for a ${n}-bucket breakdown.`);
+    return;
+  }
+  const sorted = [...withKey].sort((a, b) => a.features[key] - b.features[key]);
+  const bucketSize = Math.floor(sorted.length / n);
+
+  console.log(`\n== ${key}, low → high tercile ==`);
+  for (let b = 0; b < n; b++) {
+    const start = b * bucketSize;
+    const end = b === n - 1 ? sorted.length : start + bucketSize;
+    const rows = sorted.slice(start, end);
+    const wins = rows.filter((r) => r.return > 0).length;
+    const winRate = ((wins / rows.length) * 100).toFixed(1);
+    const avgReturn = ((rows.reduce((a, r) => a + r.return, 0) / rows.length) * 100).toFixed(2);
+    const lo = rows[0].features[key].toFixed(2);
+    const hi = rows[rows.length - 1].features[key].toFixed(2);
+    console.log(
+      `  bucket ${b + 1}/${n} [${lo}..${hi}]  n=${String(rows.length).padEnd(5)} win-rate=${winRate.padStart(5)}%  avg-return=${avgReturn.padStart(6)}%`
+    );
+  }
+}
+
 function reportHorizonTable(horizonResults) {
   console.log("\n== Fixed-horizon forward return, ignoring the exit plan (all entries) ==");
   for (const h of HORIZONS) {
@@ -259,6 +292,13 @@ async function main() {
   }
 
   reportFeatureCorrelations(results);
+  // Bucket breakdowns for whichever features are worth a closer look — a
+  // correlation coefficient alone can't tell you if the relationship is a
+  // clean step-up or a couple of outlier trades. Edit this list as new
+  // candidates clear the correlation bar in reportFeatureCorrelations.
+  for (const key of ["atrPct", "declineFrom20dHighPct"]) {
+    reportFeatureBuckets(results, key, 3);
+  }
   reportHorizonTable(horizonResults);
 }
 
