@@ -40,21 +40,6 @@ list entirely by default — see [Liquidity floor](#liquidity-floor) below.
 - **Market-breadth summary** — Tracked / Buy signals / Oversold / Overbought
   / Neutral tiles plus a distribution bar, all computed from the
   currently-selected period/interval.
-- **Confidence score** — a weighted 0–100 "Score" column next to RSI,
-  combining four inputs on *daily* candles (same fixed-daily rule as the
-  buy-signal screener, independent of the viewed period/interval):
-  **RSI depth (35%)** — how far into oversold RSI(14)/RSI(2) currently are;
-  **trend (25%)** — price vs. its 200-day SMA (not 50-day — a real backtest
-  found the 50-day version fought the strategy; see
-  [Backtesting](#backtesting-the-confidence-score) and `docs/PROGRESS.md`
-  item 14), so a short-term dip isn't penalized just for sitting below its
-  recent average, only a genuine multi-month structural decline is;
-  **volume (20%)** — today's volume vs. its 20-day average, confirming real
-  buying interest behind the bounce; **MACD momentum (20%)** — whether the
-  MACD(12,26,9) histogram is positive and rising. Expanding a row shows the
-  full breakdown. This is a confirmation layer *alongside* the RSI screener,
-  never a replacement for its fixed rule — see `lib/indicators.js`.
-
 ## Liquidity floor
 
 A stock trading a handful of shares a day can show a compelling RSI dip for
@@ -136,12 +121,14 @@ sustained load. That's an infrastructure fact, not a bug in this code.
   - `RSI_INTERVALS` — the 9 selectable chart intervals.
   - `BUY_SIGNAL` — the fixed screener thresholds (`rsi14Max: 35`,
     `rsi2Max: 10`).
-- **`lib/indicators.js`** — pure calculation, no I/O, for the confidence
-  score: `calculateSMA`/`calculateEMA`, `calculateMACD` (12,26,9),
-  `calculateCloseATR` (a close-to-close volatility **proxy**, not true ATR —
-  PSX's EOD feed has no high/low), and `computeCompositeScore()` — the
-  weighted 0–100 score plus its per-input breakdown. `SCORE_WEIGHTS` names
-  the four weights so the UI renders the same numbers it scored with.
+- **`lib/indicators.js`** — pure calculation, no I/O: general-purpose
+  daily-candle building blocks (`calculateSMA`/`calculateEMA`,
+  `calculateMACD` (12,26,9), `calculateCloseATR` — a close-to-close
+  volatility **proxy**, not true ATR, since PSX's EOD feed has no high/low)
+  used only by `scripts/backtest-features.mjs` for indicator research — not
+  currently wired into the live app (see
+  [Researching new indicators](#researching-new-indicators-for-the-screener)
+  below for why).
 - **`lib/cache.js`** — server-side in-memory state (needs a long-lived
   server, not per-request serverless — see deployment below):
   - Two-phase fetch: **core** (KSE-100) eagerly, **rest** on "Load more".
@@ -215,24 +202,38 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
-## Backtesting the confidence score
+## Researching new indicators for the screener
 
-`scripts/backtest-score.mjs` replays the app's own RSI screener and
-confidence-score functions (`lib/rsi.js`, `lib/indicators.js` — not a
-re-implementation) against PSX's historical EOD data, simulates every
-`BUY_SIGNAL` entry with the app's stated exit plan (RSI(14) re-crossing 50,
-+5% target, or a 10-session time-stop), and reports win-rate/avg-return
-broken down by the confidence score bucket showing at entry:
+A weighted "confidence score" (RSI depth + trend + volume + MACD momentum)
+was built, backtested against real PSX history, and **removed** — all four
+inputs came back with near-zero correlation (|r| < 0.03 on 1,187 real
+trades) to a trade's actual outcome, so it wasn't shipped as a number that
+looked meaningful but wasn't (full story in `docs/PROGRESS.md` items 13-15).
+
+`scripts/backtest-features.mjs` is the tool that produced that finding, now
+repurposed as an ongoing research harness: it replays the app's own RSI
+screener (`lib/rsi.js` — not a re-implementation) against PSX's historical
+EOD data, simulates every `BUY_SIGNAL` entry with the app's stated exit plan
+(RSI(14) re-crossing 50, +5% target, or a 10-session time-stop), and reports
+each candidate feature's Pearson correlation with the trade's actual forward
+return, plus a fixed-horizon return table (3/5/10/15/20/30 sessions) in case
+the exit plan itself is the thing worth revisiting:
 
 ```bash
-node scripts/backtest-score.mjs                          # KSE-100, first 40
-node scripts/backtest-score.mjs --symbols OGDC,LUCK,ENGRO # specific symbols
-node scripts/backtest-score.mjs --limit 100 --concurrency 4
+node scripts/backtest-features.mjs                          # KSE-100, first 40
+node scripts/backtest-features.mjs --symbols OGDC,LUCK,ENGRO # specific symbols
+node scripts/backtest-features.mjs --limit 100 --concurrency 4
 ```
 
 **Must be run from a machine PSX doesn't block** — this dev sandbox's IP
 403s on the EOD feed (see [Data source](#data-source)), so run it from your
 own machine or the Frankfurt Render deployment instead.
+
+**A feature only earns a place in the app once it shows a real, consistent,
+positive correlation on a large sample here** — not before. Don't wire a new
+indicator into `lib/cache.js`/the UI on theory alone; run it through this
+script against real data first, the same discipline that caught the
+confidence score's null result.
 
 ## Deploying on Render (free tier)
 

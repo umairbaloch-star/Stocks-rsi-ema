@@ -185,15 +185,53 @@ take months to round-trip 30→70, which doesn't match a 1–2 week hold.
       normal shape of the very setup the screener buys, not filtering out
       bad setups.
     - **Fix**: swapped the trend input to the 200-day SMA with a wider ±15%
-      partial-credit band (see `computeCompositeScore` in
-      `lib/indicators.js`). This asks a coarser question — "genuine
+      partial-credit band. This asks a coarser question — "genuine
       multi-month structural decline, or a dip inside a longer uptrend?" —
-      instead of penalizing every short-term dip by construction. **Not yet
-      re-verified against real data** — the user needs to re-run the
-      backtest (`node scripts/backtest-score.mjs`) after pulling this fix to
-      confirm the inversion is actually gone; if it still doesn't trend
-      upward from weak→strong on a large sample, revisit the weights
-      themselves (`SCORE_WEIGHTS`) next, not just this one input.
+      instead of penalizing every short-term dip by construction. See item
+      15 for what the re-run of this fix actually showed.
+
+15. **Confidence score removed entirely — the 200-day SMA fix (item 14)
+    still showed no predictive value, and reweighting wouldn't have fixed
+    it.** User re-ran `scripts/backtest-score.mjs` after the item-14 fix
+    (40 KSE-100 stocks, n=1,187 trades):
+    - The outright inversion from item 14 was gone, but the relationship
+      was still flat-to-declining: weak 61.8% win-rate/1.16% avg-return, low
+      60.6%/1.25%, **moderate 55.3%/0.58% — the worst of the three** — and
+      still **zero trades ever reached the 70–100 "strong" bucket**.
+    - Rather than guess at a third reweighting, added Pearson correlation
+      reporting (each component vs. the trade's actual forward return).
+      Result: **all four inputs sat at |r| < 0.03** (rsi −0.024, trend
+      −0.014, volume −0.003, macd +0.018) on n=1,187 — statistically
+      indistinguishable from noise. You cannot build a predictive composite
+      out of four independently-uncorrelated inputs by reweighting them;
+      that would just rearrange noise.
+    - One caveat worth remembering if this is ever revisited: the
+      correlation is measured *only among trades that already passed
+      `BUY_SIGNAL`* (RSI(14) ≤ 35 & RSI(2) ≤ 10), which restricts the range
+      of the RSI component especially (everything in the sample is already
+      deeply oversold). That's a real reason RSI's r looks weaker than it
+      might unconditionally — but it doesn't change the practical
+      conclusion, since the score's whole job was to discriminate *among*
+      stocks that already triggered the screener, and it couldn't.
+    - **Decision (user's call, not a unilateral revert): removed the Score
+      column, `computeCompositeScore`/`SCORE_WEIGHTS` from
+      `lib/indicators.js`, and the score fields from `lib/cache.js`
+      records** — rather than ship something that looks authoritative but
+      isn't backed by the data. `lib/indicators.js` still exports the
+      generic SMA/EMA/MACD/ATR-proxy building blocks (unused by the live
+      app now, but kept for backtest research). `fetchEodSeries` in
+      `lib/psx.js` still returns `volume` — harmless, and still needed by
+      the research tool below.
+    - Renamed `scripts/backtest-score.mjs` → `scripts/backtest-features.mjs`
+      and repurposed it: instead of scoring a fixed hand-picked composite,
+      it now computes several candidate features (oversold depth, decline
+      from a 20-day high, distance from a 252-day low, ATR-as-%-of-price,
+      down-streak length, persistent-oversold-days, days-since-last-signal)
+      at each historical `BUY_SIGNAL` entry and reports each one's
+      correlation with the actual outcome individually, plus a fixed-horizon
+      return table in case the exit plan itself (not any input) is the part
+      worth revisiting. **None of these candidates have been run against
+      real data yet** — that's the next step before anything new ships.
 
 ## Standing gotchas (still true — don't rediscover these)
 

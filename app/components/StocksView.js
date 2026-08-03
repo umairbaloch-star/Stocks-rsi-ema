@@ -10,12 +10,9 @@ const DEFAULT_PAGE_SIZE = 25;
 const DEFAULT_INTERVAL = "1D";
 const DEFAULT_PERIOD = 14;
 
-const HIGH_SCORE_MIN = 70;
-
 const FILTERS = [
   { key: "all", label: "All" },
   { key: "signals", label: "Buy signals" },
-  { key: "highscore", label: "High score" },
   { key: "oversold", label: "Oversold" },
   { key: "overbought", label: "Overbought" },
   { key: "kse100", label: "KSE-100" },
@@ -107,8 +104,6 @@ export default function StocksView({
       }
       const v = s.rsi?.[period]?.[interval.key];
       if (quickFilter === "signals") return Boolean(s.buySignal);
-      if (quickFilter === "highscore")
-        return s.score !== null && s.score !== undefined && s.score >= HIGH_SCORE_MIN;
       if (quickFilter === "oversold")
         return v !== null && v !== undefined && v <= thresholds.oversold;
       if (quickFilter === "overbought")
@@ -217,9 +212,7 @@ export default function StocksView({
               const hint =
                 f.key === "signals"
                   ? `Swing-entry setups: daily RSI(14) ≤ ${BUY_SIGNAL.rsi14Max} and RSI(2) ≤ ${BUY_SIGNAL.rsi2Max}. Exit: RSI(14) back above ~50, +5–8%, or ~10 sessions.`
-                  : f.key === "highscore"
-                    ? `Confidence score ≥ ${HIGH_SCORE_MIN}/100 — RSI + trend (200-SMA) + volume + MACD momentum, weighted`
-                    : f.key === "oversold"
+                  : f.key === "oversold"
                     ? `RSI(${period}) ≤ ${thresholds.oversold} on ${interval.label} candles`
                     : f.key === "overbought"
                       ? `RSI(${period}) ≥ ${thresholds.overbought} on ${interval.label} candles`
