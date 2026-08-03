@@ -212,6 +212,25 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000).
 
+## Backtesting the confidence score
+
+`scripts/backtest-score.mjs` replays the app's own RSI screener and
+confidence-score functions (`lib/rsi.js`, `lib/indicators.js` — not a
+re-implementation) against PSX's historical EOD data, simulates every
+`BUY_SIGNAL` entry with the app's stated exit plan (RSI(14) re-crossing 50,
++5% target, or a 10-session time-stop), and reports win-rate/avg-return
+broken down by the confidence score bucket showing at entry:
+
+```bash
+node scripts/backtest-score.mjs                          # KSE-100, first 40
+node scripts/backtest-score.mjs --symbols OGDC,LUCK,ENGRO # specific symbols
+node scripts/backtest-score.mjs --limit 100 --concurrency 4
+```
+
+**Must be run from a machine PSX doesn't block** — this dev sandbox's IP
+403s on the EOD feed (see [Data source](#data-source)), so run it from your
+own machine or the Frankfurt Render deployment instead.
+
 ## Deploying on Render (free tier)
 
 This app keeps its cache in the server process's memory, so it needs a
