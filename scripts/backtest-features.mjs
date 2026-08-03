@@ -259,6 +259,65 @@ function reportFeatureBuckets(results, key, n = 3) {
   );
 }
 
+/** The value at/above which a feature is in its own top tercile, within `rows`. */
+function topTercileCutoff(rows, key) {
+  const sorted = [...rows].map((r) => r.features[key]).sort((a, b) => a - b);
+  const idx = Math.floor(sorted.length * (2 / 3));
+  return sorted[idx];
+}
+
+/**
+ * Splits trades into four quadrants by whether each of two features is in
+ * its own top tercile or not, and reports win-rate/avg/median per quadrant.
+ * If "both high" clearly beats either single-high quadrant, the two
+ * features are adding independent information; if "both high" looks about
+ * the same as whichever single feature is stronger alone, they're mostly
+ * measuring the same underlying thing and only one is worth keeping.
+ */
+function reportQuadrantAnalysis(results, keyA, keyB) {
+  const rows = results.filter(
+    (r) => r.features[keyA] !== null && r.features[keyA] !== undefined &&
+      r.features[keyB] !== null && r.features[keyB] !== undefined
+  );
+  if (rows.length < 40) {
+    console.log(`\n${keyA} + ${keyB}: not enough trades (n=${rows.length}) for a quadrant breakdown.`);
+    return;
+  }
+  const cutoffA = topTercileCutoff(rows, keyA);
+  const cutoffB = topTercileCutoff(rows, keyB);
+
+  const quadrants = [
+    { label: "both high", test: (r) => r.features[keyA] >= cutoffA && r.features[keyB] >= cutoffB },
+    { label: `${keyA} only`, test: (r) => r.features[keyA] >= cutoffA && r.features[keyB] < cutoffB },
+    { label: `${keyB} only`, test: (r) => r.features[keyA] < cutoffA && r.features[keyB] >= cutoffB },
+    { label: "neither high", test: (r) => r.features[keyA] < cutoffA && r.features[keyB] < cutoffB },
+  ];
+
+  console.log(`\n== Combined ${keyA} (top-tercile ≥ ${cutoffA.toFixed(2)}) + ${keyB} (top-tercile ≥ ${cutoffB.toFixed(2)}) ==`);
+  for (const q of quadrants) {
+    const qRows = rows.filter(q.test);
+    if (qRows.length === 0) {
+      console.log(`  ${q.label.padEnd(16)} n=0`);
+      continue;
+    }
+    const wins = qRows.filter((r) => r.return > 0).length;
+    const winRate = ((wins / qRows.length) * 100).toFixed(1);
+    const avgReturn = ((qRows.reduce((a, r) => a + r.return, 0) / qRows.length) * 100).toFixed(2);
+    const medianReturn = (
+      [...qRows].sort((a, b) => a.return - b.return)[Math.floor(qRows.length / 2)].return * 100
+    ).toFixed(2);
+    console.log(
+      `  ${q.label.padEnd(16)} n=${String(qRows.length).padEnd(5)} win-rate=${winRate.padStart(5)}%  avg-return=${avgReturn.padStart(6)}%  median-return=${medianReturn.padStart(6)}%`
+    );
+  }
+  console.log(
+    "\n  If \"both high\" clearly beats every single-high quadrant, the two features add\n" +
+      "  independent information together. If \"both high\" looks about the same as\n" +
+      "  whichever single-high quadrant is stronger, they're mostly redundant and only\n" +
+      "  one is worth keeping."
+  );
+}
+
 function reportHorizonTable(horizonResults) {
   console.log("\n== Fixed-horizon forward return, ignoring the exit plan (all entries) ==");
   for (const h of HORIZONS) {
@@ -306,6 +365,7 @@ async function main() {
   for (const key of ["atrPct", "declineFrom20dHighPct"]) {
     reportFeatureBuckets(results, key, 3);
   }
+  reportQuadrantAnalysis(results, "atrPct", "declineFrom20dHighPct");
   reportHorizonTable(horizonResults);
 }
 
