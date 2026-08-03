@@ -151,6 +151,13 @@ function signalSummary(s) {
     `Volume ${s.volumeRatio !== null ? `${s.volumeRatio}× the 20-day average` : "n/a"}${
       s.thinVolume ? " — thin, downgrades a would-be Buy/Sell to Watch" : ""
     }`,
+    `RSI(5) ${s.rsi5 ?? "n/a"}${
+      s.extendedOverbought
+        ? " — already extended (≥70), downgrades a would-be Buy to Watch"
+        : s.extendedOversold
+          ? " — already extended (≤30), downgrades a would-be Sell to Watch"
+          : ""
+    }`,
   ];
   return parts.join(" · ");
 }
@@ -332,7 +339,15 @@ function SignalBadge({ signal }) {
       : "n/a"
   }) · Volume ${
     signal.volumeRatio !== null ? `${signal.volumeRatio}× the 20-day average` : "n/a"
-  }${signal.thinVolume ? " (thin — downgrades Buy/Sell to Watch)" : ""}`;
+  }${signal.thinVolume ? " (thin — downgrades Buy/Sell to Watch)" : ""} · RSI(5) ${
+    signal.rsi5 ?? "n/a"
+  }${
+    signal.extendedOverbought
+      ? " (already extended ≥70 — downgrades Buy to Watch)"
+      : signal.extendedOversold
+        ? " (already extended ≤30 — downgrades Sell to Watch)"
+        : ""
+  }`;
   return <CallBadge label={signal.signal} title={title} />;
 }
 
