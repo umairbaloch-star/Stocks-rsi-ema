@@ -38,6 +38,8 @@ export default function MarketSummary({ stocks, period, interval, thresholds }) 
   const oversold = withRsi.filter((s) => value(s) <= thresholds.oversold).length;
   const neutral = withRsi.length - overbought - oversold;
   const signals = stocks.filter((s) => s.buySignal).length;
+  const highScore = stocks.filter((s) => s.score !== null && s.score !== undefined && s.score >= 70)
+    .length;
 
   const denom = oversold + neutral + overbought;
   const segments = [
@@ -57,6 +59,12 @@ export default function MarketSummary({ stocks, period, interval, thresholds }) 
           value={signals}
           dot="var(--accent)"
           hint={`RSI(14) ≤ ${BUY_SIGNAL.rsi14Max} & RSI(2) ≤ ${BUY_SIGNAL.rsi2Max} · daily`}
+        />
+        <Stat
+          label="High score"
+          value={highScore}
+          dot="var(--accent)"
+          hint="Confidence score ≥ 70 · RSI + trend + volume + MACD, weighted"
         />
         <Stat
           label="Oversold"

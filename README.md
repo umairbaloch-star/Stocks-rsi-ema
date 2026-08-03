@@ -40,6 +40,17 @@ list entirely by default — see [Liquidity floor](#liquidity-floor) below.
 - **Market-breadth summary** — Tracked / Buy signals / Oversold / Overbought
   / Neutral tiles plus a distribution bar, all computed from the
   currently-selected period/interval.
+- **Confidence score** — a weighted 0–100 "Score" column next to RSI,
+  combining four inputs on *daily* candles (same fixed-daily rule as the
+  buy-signal screener, independent of the viewed period/interval):
+  **RSI depth (35%)** — how far into oversold RSI(14)/RSI(2) currently are;
+  **trend (25%)** — price vs. its 50-day SMA, so a dip is only scored well
+  if it's in an uptrend or reclaiming one, not a falling knife;
+  **volume (20%)** — today's volume vs. its 20-day average, confirming real
+  buying interest behind the bounce; **MACD momentum (20%)** — whether the
+  MACD(12,26,9) histogram is positive and rising. Expanding a row shows the
+  full breakdown. This is a confirmation layer *alongside* the RSI screener,
+  never a replacement for its fixed rule — see `lib/indicators.js`.
 
 ## Liquidity floor
 
@@ -122,6 +133,12 @@ sustained load. That's an infrastructure fact, not a bug in this code.
   - `RSI_INTERVALS` — the 9 selectable chart intervals.
   - `BUY_SIGNAL` — the fixed screener thresholds (`rsi14Max: 35`,
     `rsi2Max: 10`).
+- **`lib/indicators.js`** — pure calculation, no I/O, for the confidence
+  score: `calculateSMA`/`calculateEMA`, `calculateMACD` (12,26,9),
+  `calculateCloseATR` (a close-to-close volatility **proxy**, not true ATR —
+  PSX's EOD feed has no high/low), and `computeCompositeScore()` — the
+  weighted 0–100 score plus its per-input breakdown. `SCORE_WEIGHTS` names
+  the four weights so the UI renders the same numbers it scored with.
 - **`lib/cache.js`** — server-side in-memory state (needs a long-lived
   server, not per-request serverless — see deployment below):
   - Two-phase fetch: **core** (KSE-100) eagerly, **rest** on "Load more".

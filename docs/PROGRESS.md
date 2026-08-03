@@ -144,6 +144,27 @@ take months to round-trip 30→70, which doesn't match a 1–2 week hold.
       `/api/stocks` request (`?watch=SYM1,SYM2`) so the server-side filter
       can exempt exactly those symbols.
 
+13. **Composite confidence score (RSI + trend + volume + MACD, weighted).**
+    User asked for "more reliable" indicators layered onto the RSI screener.
+    Added `lib/indicators.js` — SMA/EMA, MACD(12,26,9), and a weighted 0–100
+    score (RSI 35% / 50-day SMA trend 25% / volume-vs-20-day-average 20% /
+    MACD histogram momentum 20%), shown as a new "Score" column next to RSI.
+    Two things worth knowing before touching this:
+    - **It's an additive confirmation layer, not a replacement for
+      `BUY_SIGNAL`.** Per item 9/the fixed-screener gotcha below, the
+      existing daily RSI(14)≤35 & RSI(2)≤10 rule stays untouched and
+      independent of the viewed period/interval; the score is a *second*,
+      separate field (`score`/`scoreBreakdown` on each stock record),
+      always computed on daily candles for the same reason.
+    - **No true ATR is possible.** PSX's EOD feed is `[timestamp, open,
+      volume, close]` — no high/low — so `calculateCloseATR` is a
+      close-to-close volatility proxy, not textbook ATR. It's exposed as
+      `atr14` on each record but not yet wired into the score; don't present
+      it as a real ATR-based stop distance without accounting for that gap.
+    - Volume history had to be added to `fetchEodSeries` (previously
+      returned only `{ date, close }`) so the 20-day average volume behind
+      the score's volume term didn't need a second network round-trip.
+
 ## Standing gotchas (still true — don't rediscover these)
 
 - **This dev sandbox's IP is rate-limited/blocked by PSX** (`503` on

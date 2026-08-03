@@ -4,11 +4,12 @@ import { Fragment, useEffect, useState } from "react";
 import RSIChart from "./RSIChart";
 import { StarIcon } from "./TopBar";
 import { RSI_PERIODS } from "@/lib/rsi";
+import { SCORE_WEIGHTS } from "@/lib/indicators";
 function tradingViewUrl(symbol) {
   return `https://www.tradingview.com/chart/?symbol=PSX:${encodeURIComponent(symbol)}`;
 }
 
-const COLUMN_COUNT = 6; // star, symbol, name, price, RSI, volume
+const COLUMN_COUNT = 7; // star, symbol, name, price, RSI, score, volume
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -68,6 +69,75 @@ function RSICell({ value, thresholds, align = "center" }) {
         />
       </span>
     </span>
+  );
+}
+
+const SCORE_LABELS = { rsi: "RSI", trend: "Trend (50-SMA)", volume: "Volume vs 20d avg", macd: "MACD momentum" };
+
+// Confidence-score zones, same visual language as RSICell: a filled meter
+// whose color and position both carry the signal. This score is a SEPARATE,
+// weighted confirmation layer on top of the fixed daily BUY_SIGNAL screener
+// (lib/rsi.js) — it never replaces or reparameterizes that rule.
+function scoreZone(value) {
+  if (value >= 70) return "strong";
+  if (value >= 50) return "moderate";
+  return "weak";
+}
+
+const SCORE_FILL = {
+  strong: "var(--up)",
+  moderate: "var(--accent)",
+  weak: "var(--ink-3)",
+};
+
+function ScoreCell({ value, breakdown, align = "center" }) {
+  if (value === null || value === undefined) {
+    return <span className="text-sm text-ink-3">—</span>;
+  }
+  const zone = scoreZone(value);
+  const title = breakdown
+    ? Object.entries(breakdown)
+        .map(([k, v]) => `${SCORE_LABELS[k] ?? k}: ${v}/100 (weight ${SCORE_WEIGHTS[k]}%)`)
+        .join(" · ")
+    : undefined;
+  return (
+    <span
+      className={`inline-flex w-20 flex-col gap-[5px] ${
+        align === "center" ? "items-center" : "items-end"
+      }`}
+      title={title}
+    >
+      <span
+        className={`font-mono text-[13px] leading-none tabular-nums text-ink ${
+          zone === "strong" ? "font-semibold" : ""
+        }`}
+      >
+        {Math.round(value)}
+      </span>
+      <span className="relative block h-[3px] w-full rounded-full bg-surface-2">
+        <span
+          className="absolute left-0 top-0 h-full rounded-full"
+          style={{
+            width: `${Math.max(3, Math.min(100, value))}%`,
+            backgroundColor: SCORE_FILL[zone],
+          }}
+        />
+      </span>
+    </span>
+  );
+}
+
+function ScoreBreakdown({ breakdown, score }) {
+  if (!breakdown || score === null || score === undefined) return null;
+  return (
+    <p className="mb-1.5 text-[11px] text-ink-3">
+      Confidence score {Math.round(score)}/100 —{" "}
+      {Object.entries(breakdown)
+        .map(([k, v]) => `${SCORE_LABELS[k] ?? k} ${v}/100 (${SCORE_WEIGHTS[k]}% weight)`)
+        .join(" · ")}
+      . A trend/volume/momentum confirmation layer alongside the RSI screener above — not a
+      replacement for it.
+    </p>
   );
 }
 
@@ -248,6 +318,7 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
           RSI(2) ≤ 10 · {EXIT_PLAN}.
         </p>
       )}
+      <ScoreBreakdown breakdown={stock.scoreBreakdown} score={stock.score} />
       {failed ? (
         <p className="py-4 text-sm text-ink-3">Couldn&apos;t load the RSI trend — try again.</p>
       ) : history === null ? (
@@ -288,11 +359,12 @@ export default function StocksTable({
           <table className="w-full table-fixed text-xs md:text-sm">
             <colgroup>
               <col style={{ width: "4%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "34%" }} />
               <col style={{ width: "12%" }} />
+              <col style={{ width: "28%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "15%" }} />
+              <col style={{ width: "13%" }} />
               <col style={{ width: "17%" }} />
-              <col style={{ width: "20%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <tr className="border-b border-grid">
@@ -313,6 +385,14 @@ export default function StocksTable({
                 >
                   RSI({period}) · {interval.key}
                   <SortIndicator active={sortKey === "rsi"} dir={sortDir} />
+                </th>
+                <th
+                  onClick={() => onSort("score")}
+                  title="Weighted confidence score: RSI 35% · Trend (50-SMA) 25% · Volume vs 20d avg 20% · MACD momentum 20%"
+                  className={`${sortableCell} text-center`}
+                >
+                  Score
+                  <SortIndicator active={sortKey === "score"} dir={sortDir} />
                 </th>
                 <th
                   onClick={() => onSort("volume")}
@@ -357,6 +437,9 @@ export default function StocksTable({
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <RSICell value={stock.rsi?.[period]?.[interval.key]} thresholds={thresholds} />
+                    </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <ScoreCell value={stock.score} breakdown={stock.scoreBreakdown} />
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-[13px] tabular-nums text-ink-3">
                       {formatVolume(stock.volume)}
@@ -432,6 +515,10 @@ export default function StocksTable({
                   thresholds={thresholds}
                   align="end"
                 />
+              </div>
+              <div className="flex items-center justify-between px-3 pb-3">
+                <span className="text-[10px] uppercase tracking-wider text-ink-3">Score</span>
+                <ScoreCell value={stock.score} breakdown={stock.scoreBreakdown} align="end" />
               </div>
             </div>
             {expandedSymbol === stock.symbol && (
