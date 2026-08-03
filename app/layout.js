@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata = {
-  title: "PSX Stocks RSI Dashboard",
+  title: "Stock RSI Daily",
   description: "RSI(14) dashboard for Pakistan Stock Exchange equities",
 };
 
