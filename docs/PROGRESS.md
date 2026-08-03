@@ -165,6 +165,36 @@ take months to round-trip 30→70, which doesn't match a 1–2 week hold.
       returned only `{ date, close }`) so the 20-day average volume behind
       the score's volume term didn't need a second network round-trip.
 
+14. **Score's trend input recalibrated: 50-day SMA → 200-day SMA, based on a
+    real backtest, not theory.** User ran `scripts/backtest-score.mjs`
+    (added alongside item 13) against 40 KSE-100 stocks' real EOD history
+    from their own machine (this sandbox's IP is blocked by PSX, see
+    gotchas below). Results on the item-13 version:
+    - **Every one of 1,399 simulated `BUY_SIGNAL` trades scored under
+      50/100** — none reached the "moderate" or "strong" buckets at all.
+    - **On the larger sample (n=1,399), the score's ranking was inverted**:
+      the 0–29 "weak" bucket had a *higher* win rate (60.0% vs 54.0%) and
+      *better* avg return (1.10% vs 0.51%) than the 30–49 "low" bucket — the
+      opposite of what a working score should show. (A 3-symbol spot-check,
+      n=101, showed the right direction, but its 30–49 bucket was only 23
+      trades — not enough to outweigh the 1,399-trade result.)
+    - **Root cause**: `BUY_SIGNAL` requires RSI(2) ≤ 10 — a stock that
+      oversold is almost never *also* trading above its 50-day average, since
+      the recent decline that produced the RSI reading is exactly what pulls
+      price below a short average. The 50-day trend test was penalizing the
+      normal shape of the very setup the screener buys, not filtering out
+      bad setups.
+    - **Fix**: swapped the trend input to the 200-day SMA with a wider ±15%
+      partial-credit band (see `computeCompositeScore` in
+      `lib/indicators.js`). This asks a coarser question — "genuine
+      multi-month structural decline, or a dip inside a longer uptrend?" —
+      instead of penalizing every short-term dip by construction. **Not yet
+      re-verified against real data** — the user needs to re-run the
+      backtest (`node scripts/backtest-score.mjs`) after pulling this fix to
+      confirm the inversion is actually gone; if it still doesn't trend
+      upward from weak→strong on a large sample, revisit the weights
+      themselves (`SCORE_WEIGHTS`) next, not just this one input.
+
 ## Standing gotchas (still true — don't rediscover these)
 
 - **This dev sandbox's IP is rate-limited/blocked by PSX** (`503` on

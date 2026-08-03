@@ -72,7 +72,7 @@ function RSICell({ value, thresholds, align = "center" }) {
   );
 }
 
-const SCORE_LABELS = { rsi: "RSI", trend: "Trend (50-SMA)", volume: "Volume vs 20d avg", macd: "MACD momentum" };
+const SCORE_LABELS = { rsi: "RSI", trend: "Trend (200-SMA)", volume: "Volume vs 20d avg", macd: "MACD momentum" };
 
 // Confidence-score zones, same visual language as RSICell: a filled meter
 // whose color and position both carry the signal. This score is a SEPARATE,
@@ -388,7 +388,7 @@ export default function StocksTable({
                 </th>
                 <th
                   onClick={() => onSort("score")}
-                  title="Weighted confidence score: RSI 35% · Trend (50-SMA) 25% · Volume vs 20d avg 20% · MACD momentum 20%"
+                  title="Weighted confidence score: RSI 35% · Trend (200-SMA) 25% · Volume vs 20d avg 20% · MACD momentum 20%"
                   className={`${sortableCell} text-center`}
                 >
                   Score

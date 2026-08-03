@@ -218,7 +218,7 @@ export default function StocksView({
                 f.key === "signals"
                   ? `Swing-entry setups: daily RSI(14) ≤ ${BUY_SIGNAL.rsi14Max} and RSI(2) ≤ ${BUY_SIGNAL.rsi2Max}. Exit: RSI(14) back above ~50, +5–8%, or ~10 sessions.`
                   : f.key === "highscore"
-                    ? `Confidence score ≥ ${HIGH_SCORE_MIN}/100 — RSI + trend (50-SMA) + volume + MACD momentum, weighted`
+                    ? `Confidence score ≥ ${HIGH_SCORE_MIN}/100 — RSI + trend (200-SMA) + volume + MACD momentum, weighted`
                     : f.key === "oversold"
                     ? `RSI(${period}) ≤ ${thresholds.oversold} on ${interval.label} candles`
                     : f.key === "overbought"

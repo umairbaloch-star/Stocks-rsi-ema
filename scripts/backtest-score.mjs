@@ -15,7 +15,7 @@
  * and backtests up to --limit of them (default 40) to keep the run quick.
  *
  * Methodology (no look-ahead):
- *   - RSI(14)/RSI(2), 50-day SMA, MACD(12,26,9) histogram, and 20-day average
+ *   - RSI(14)/RSI(2), 200-day SMA, MACD(12,26,9) histogram, and 20-day average
  *     volume are computed with the same whole-series functions cache.js uses
  *     in production; each is causal (index i only depends on data up to i).
  *   - A "trade" opens on any day the fixed BUY_SIGNAL rule fires (daily
@@ -106,7 +106,7 @@ async function backtestSymbol(symbol, results) {
     console.warn(`  [skip] ${symbol}: ${err.message}`);
     return;
   }
-  if (series.length < 90) return; // not enough history for SMA50 + MACD warm-up + a hold window
+  if (series.length < 220) return; // not enough history for SMA200 + MACD warm-up + a hold window
 
   const adjusted = adjustForCorporateActions(series);
   const closes = adjusted.map((p) => p.close);
@@ -114,10 +114,10 @@ async function backtestSymbol(symbol, results) {
 
   const rsi14 = calculateRSISeries(closes, 14);
   const rsi2 = calculateRSISeries(closes, 2);
-  const sma50 = calculateSMA(closes, 50);
+  const sma200 = calculateSMA(closes, 200);
   const macd = calculateMACD(closes);
 
-  for (let i = 60; i < closes.length - 1; i++) {
+  for (let i = 200; i < closes.length - 1; i++) {
     const r14 = rsi14[i];
     const r2 = rsi2[i];
     if (r14 === null || r2 === null) continue;
@@ -131,7 +131,7 @@ async function backtestSymbol(symbol, results) {
       r14,
       r2,
       price: closes[i],
-      sma50: sma50[i],
+      sma200: sma200[i],
       currentVolume: volumes[i],
       avgVolume20,
       macdHistogram: macd.histogram[i],

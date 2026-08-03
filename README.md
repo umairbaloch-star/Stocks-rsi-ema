@@ -44,8 +44,11 @@ list entirely by default — see [Liquidity floor](#liquidity-floor) below.
   combining four inputs on *daily* candles (same fixed-daily rule as the
   buy-signal screener, independent of the viewed period/interval):
   **RSI depth (35%)** — how far into oversold RSI(14)/RSI(2) currently are;
-  **trend (25%)** — price vs. its 50-day SMA, so a dip is only scored well
-  if it's in an uptrend or reclaiming one, not a falling knife;
+  **trend (25%)** — price vs. its 200-day SMA (not 50-day — a real backtest
+  found the 50-day version fought the strategy; see
+  [Backtesting](#backtesting-the-confidence-score) and `docs/PROGRESS.md`
+  item 14), so a short-term dip isn't penalized just for sitting below its
+  recent average, only a genuine multi-month structural decline is;
   **volume (20%)** — today's volume vs. its 20-day average, confirming real
   buying interest behind the bounce; **MACD momentum (20%)** — whether the
   MACD(12,26,9) histogram is positive and rising. Expanding a row shows the
