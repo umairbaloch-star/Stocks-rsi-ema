@@ -244,12 +244,19 @@ function reportFeatureBuckets(results, key, n = 3) {
     const wins = rows.filter((r) => r.return > 0).length;
     const winRate = ((wins / rows.length) * 100).toFixed(1);
     const avgReturn = ((rows.reduce((a, r) => a + r.return, 0) / rows.length) * 100).toFixed(2);
+    const medianReturn = (
+      [...rows].sort((a, b) => a.return - b.return)[Math.floor(rows.length / 2)].return * 100
+    ).toFixed(2);
     const lo = rows[0].features[key].toFixed(2);
     const hi = rows[rows.length - 1].features[key].toFixed(2);
     console.log(
-      `  bucket ${b + 1}/${n} [${lo}..${hi}]  n=${String(rows.length).padEnd(5)} win-rate=${winRate.padStart(5)}%  avg-return=${avgReturn.padStart(6)}%`
+      `  bucket ${b + 1}/${n} [${lo}..${hi}]  n=${String(rows.length).padEnd(5)} win-rate=${winRate.padStart(5)}%  avg-return=${avgReturn.padStart(6)}%  median-return=${medianReturn.padStart(6)}%`
     );
   }
+  console.log(
+    "  (median close to avg = a broad effect across the bucket; median far below avg =\n" +
+      "   a handful of outsized winners are inflating the average, not a broad edge.)"
+  );
 }
 
 function reportHorizonTable(horizonResults) {
