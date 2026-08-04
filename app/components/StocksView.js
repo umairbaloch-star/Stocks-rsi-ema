@@ -138,6 +138,7 @@ export default function StocksView({
       if (sortKey === "ema50") return s.signal?.ema50 ?? null;
       if (sortKey === "macd") return s.signal?.macdScore ?? null;
       if (sortKey === "signal") return CALL_RANK[s.signal?.signal] ?? null;
+      if (sortKey === "prediction") return s.prediction?.predictedChangePercent ?? null;
       return s[sortKey];
     };
     copy.sort((a, b) => {
