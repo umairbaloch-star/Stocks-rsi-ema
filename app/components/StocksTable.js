@@ -9,8 +9,8 @@ function tradingViewUrl(symbol) {
 }
 
 // star, symbol, name, price, % chg (day), RSI, volume, entry, confidence,
-// EMA20, EMA50, MACD, Signal, Predicted (next session)
-const COLUMN_COUNT = 14;
+// EMA20, EMA50, MACD, Signal, Predicted (next session), Final Stance
+const COLUMN_COUNT = 15;
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -268,6 +268,7 @@ const CALL_STYLE = {
   Buy: { color: "var(--up-text)", bg: "var(--up)" },
   Neutral: { color: "#8a6400", bg: "var(--warning)" },
   Watch: { color: "#8a6400", bg: "var(--warning)" },
+  Hold: { color: "#8a6400", bg: "var(--warning)" },
   Bearish: { color: "var(--down)", bg: "var(--down)" },
   Sell: { color: "var(--down)", bg: "var(--down)" },
   "Strong Sell": { color: "var(--down)", bg: "var(--down)" },
@@ -399,6 +400,25 @@ function SignalBadge({ signal }) {
         : ""
   }`;
   return <CallBadge label={signal.signal} title={title} />;
+}
+
+/**
+ * The single reconciled verdict — a weighted blend of Signal, Predicted,
+ * MACD, EMA20/50, and RSI14 (see computeFinalStance in lib/technicals.js
+ * for the weights and the exact vote per factor). Built so a user doesn't
+ * have to eyeball several columns that can legitimately disagree; the
+ * tooltip and expanded row spell out each factor's vote and weight, and how
+ * much of the applicable weight actually agreed with the final call.
+ */
+function StanceBadge({ stance }) {
+  if (!stance) return <span className="text-xs text-ink-3">—</span>;
+  const votedParts = stance.breakdown
+    .filter((f) => f.vote !== null)
+    .map((f) => `${f.label} ${f.weight}% (${f.vote > 0 ? "+" : ""}${f.vote.toFixed(2)})`);
+  const title = `Score ${stance.score > 0 ? "+" : ""}${stance.score} · ${Math.round(
+    stance.agreement * 100
+  )}% of applicable weight agrees with this call.\n${votedParts.join(" · ")}`;
+  return <CallBadge label={stance.stance} title={title} />;
 }
 
 function SortIndicator({ active, dir }) {
@@ -567,6 +587,22 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
           Open on TradingView ↗
         </a>
       </div>
+      {stock.finalStance && (
+        <p className="mb-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-ink-3">
+          <span className="font-semibold text-ink-2">Final stance:</span>
+          <StanceBadge stance={stock.finalStance} />
+          <span>
+            (score {stock.finalStance.score > 0 ? "+" : ""}
+            {stock.finalStance.score}, {Math.round(stock.finalStance.agreement * 100)}% of applicable
+            weight agrees) —{" "}
+            {stock.finalStance.breakdown
+              .filter((f) => f.vote !== null)
+              .map((f) => `${f.label} ${f.weight}%`)
+              .join(" · ")}
+            .
+          </span>
+        </p>
+      )}
       {insight && (
         <p className="mb-1 text-xs" style={{ color: insight.tone }}>
           {insight.text}
@@ -667,22 +703,23 @@ export default function StocksTable({
           (still sticky on Y within the same container). */}
       <div className="hidden overflow-hidden rounded-xl border border-hairline bg-surface shadow-sm sm:block">
         <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full min-w-[1360px] table-fixed text-xs md:text-sm">
+          <table className="w-full min-w-[1520px] table-fixed text-xs md:text-sm">
             <colgroup>
               <col style={{ width: "3%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "13%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "14%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "7%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "7%" }} />
+              <col style={{ width: "10%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <tr className="border-b border-grid">
@@ -776,6 +813,14 @@ export default function StocksTable({
                   Predicted
                   <SortIndicator active={sortKey === "prediction"} dir={sortDir} />
                 </th>
+                <th
+                  onClick={() => onSort("finalStance")}
+                  title="One weighted verdict from Signal, Predicted, MACD, EMA20/50, and RSI(14) — see the expanded row for the weights and each factor's vote"
+                  className={`${sortableCell} text-center`}
+                >
+                  Final Stance
+                  <SortIndicator active={sortKey === "finalStance"} dir={sortDir} />
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -839,6 +884,9 @@ export default function StocksTable({
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <PredictedCell prediction={stock.prediction} />
+                    </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <StanceBadge stance={stock.finalStance} />
                     </td>
                   </tr>
                   {expandedSymbol === stock.symbol && (
@@ -925,6 +973,12 @@ export default function StocksTable({
                   align="end"
                 />
               </div>
+              {stock.finalStance && (
+                <div className="flex items-center justify-between gap-2 border-t border-hairline/60 px-3 py-2 text-xs">
+                  <span className="text-ink-3">Final stance</span>
+                  <StanceBadge stance={stock.finalStance} />
+                </div>
+              )}
               {stock.analysis && (
                 <div className="flex items-center justify-between gap-2 border-t border-hairline/60 px-3 py-2 text-xs">
                   <span className="text-ink-3">
