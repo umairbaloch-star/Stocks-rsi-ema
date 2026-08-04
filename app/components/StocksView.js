@@ -139,6 +139,7 @@ export default function StocksView({
       if (sortKey === "macd") return s.signal?.macdScore ?? null;
       if (sortKey === "signal") return CALL_RANK[s.signal?.signal] ?? null;
       if (sortKey === "finalStance") return s.finalStance?.score ?? null;
+      if (sortKey === "exitTarget") return s.analysis?.exitTargetDate ?? null;
       return s[sortKey];
     };
     copy.sort((a, b) => {

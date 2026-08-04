@@ -8,9 +8,9 @@ function tradingViewUrl(symbol) {
   return `https://www.tradingview.com/chart/?symbol=PSX:${encodeURIComponent(symbol)}`;
 }
 
-// star, symbol, name, price, % chg (day), RSI, volume, entry, confidence,
-// EMA20, EMA50, MACD, Signal, Final Stance
-const COLUMN_COUNT = 14;
+// star, symbol, name, price, % chg (day), RSI, volume, entry, exit target,
+// confidence, EMA20, EMA50, MACD, Signal, Final Stance
+const COLUMN_COUNT = 15;
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -87,6 +87,11 @@ function formatVolume(value) {
   if (value >= 1e6) return (value / 1e6).toFixed(2) + "M";
   if (value >= 1e3) return (value / 1e3).toFixed(1) + "K";
   return String(value);
+}
+
+function formatDate(value) {
+  if (value === null || value === undefined) return "—";
+  return new Date(value).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
 
 function formatPercent(value) {
@@ -194,6 +199,32 @@ function EntryExitCell({ value }) {
   return (
     <span className="font-mono text-[13px] tabular-nums text-ink">
       {formatPrice(value)}
+    </span>
+  );
+}
+
+/**
+ * The swing exit plan's price target (analysis.exitShortTerm) and the date
+ * its ~10-session time-stop leg falls on (analysis.exitTargetDate) — "sell
+ * here, or by here, whichever comes first," made concrete. The % shown is
+ * profit from the suggested Entry price to this exit target, not from
+ * today's price — see the tooltip and expanded row for the full plan.
+ */
+function ExitTargetCell({ analysis, align = "center" }) {
+  if (!analysis) return <span className="text-xs text-ink-3">—</span>;
+  const { exitShortTerm, exitTargetDate, exitProfitPercent } = analysis;
+  const title = `Swing exit plan: sell at ~${formatPrice(exitShortTerm)} (${formatPercent(
+    exitProfitPercent
+  )} from the Entry price), or by ~${formatDate(
+    exitTargetDate
+  )} (${EXIT_HOLD_SESSIONS_LABEL}), or when daily RSI(14) recrosses ~50 — whichever comes first.`;
+  return (
+    <span title={title} className={`inline-flex flex-col gap-0.5 ${ALIGN_CLASS[align] ?? "items-center"}`}>
+      <span className="font-mono text-[12px] tabular-nums text-ink">{formatPrice(exitShortTerm)}</span>
+      <span className="font-mono text-[10px] tabular-nums text-up-text">
+        {formatPercent(exitProfitPercent)}
+      </span>
+      <span className="text-[10px] text-ink-3">by {formatDate(exitTargetDate)}</span>
     </span>
   );
 }
@@ -423,6 +454,9 @@ function Kse100Tag() {
 const SIGNAL_RULE =
   "fixed rule on daily candles, independent of the RSI/Interval selected above";
 const EXIT_PLAN = "Exit: daily RSI(14) back above ~50, +5–8% target, or ~10 sessions — whichever first";
+// Matches EXIT_HOLD_SESSIONS in lib/technicals.js, which is what
+// analysis.exitTargetDate is computed from.
+const EXIT_HOLD_SESSIONS_LABEL = "~10 trading sessions time-stop";
 
 /**
  * A reading of the RSI the user is CURRENTLY viewing (selected period ×
@@ -603,6 +637,18 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
           {analysisSummary(stock.analysis)}
         </p>
       )}
+      {stock.analysis && (
+        <p className="mb-1.5 text-[11px] text-ink-3">
+          <span className="font-semibold text-ink-2">
+            Exit ~{formatPrice(stock.analysis.exitShortTerm)} (
+            {formatPercent(stock.analysis.exitProfitPercent)} from Entry) by ~
+            {formatDate(stock.analysis.exitTargetDate)}.
+          </span>{" "}
+          Swing exit plan: sell at that price, or by that date ({EXIT_HOLD_SESSIONS_LABEL}), or when
+          daily RSI(14) recrosses ~50 — whichever comes first. A same-day scalp exit sits closer, at
+          ~{formatPrice(stock.analysis.exitSameDay)}.
+        </p>
+      )}
       {stock.signal && (
         <div className="mb-1.5 flex items-center gap-4">
           <EmaValueCell
@@ -669,22 +715,23 @@ export default function StocksTable({
           (still sticky on Y within the same container). */}
       <div className="hidden overflow-hidden rounded-xl border border-hairline bg-surface shadow-sm sm:block">
         <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full min-w-[1420px] table-fixed text-xs md:text-sm">
+          <table className="w-full min-w-[1560px] table-fixed text-xs md:text-sm">
             <colgroup>
               <col style={{ width: "3%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "14%" }} />
-              <col style={{ width: "7%" }} />
+              <col style={{ width: "13%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "5%" }} />
-              <col style={{ width: "7%" }} />
+              <col style={{ width: "6%" }} />
               <col style={{ width: "5%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "8%" }} />
               <col style={{ width: "5%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "7%" }} />
               <col style={{ width: "5%" }} />
-              <col style={{ width: "10%" }} />
-              <col style={{ width: "14%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "13%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <tr className="border-b border-grid">
@@ -729,6 +776,14 @@ export default function StocksTable({
                 >
                   Entry
                   <SortIndicator active={sortKey === "entry"} dir={sortDir} />
+                </th>
+                <th
+                  onClick={() => onSort("exitTarget")}
+                  title="Swing exit plan: price target and the calendar date its ~10-session time-stop falls on — see the expanded row for the full plan"
+                  className={`${sortableCell} text-center`}
+                >
+                  Exit Target
+                  <SortIndicator active={sortKey === "exitTarget"} dir={sortDir} />
                 </th>
                 <th
                   onClick={() => onSort("confidence")}
@@ -823,6 +878,9 @@ export default function StocksTable({
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <EntryExitCell value={stock.analysis?.entry} />
+                    </td>
+                    <td className="px-2 py-2.5 text-center">
+                      <ExitTargetCell analysis={stock.analysis} />
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <ConfidenceBadge analysis={stock.analysis} />
@@ -928,6 +986,12 @@ export default function StocksTable({
                     Entry <span className="font-mono text-ink-2">{formatPrice(stock.analysis.entry)}</span>
                   </span>
                   <ConfidenceBadge analysis={stock.analysis} />
+                </div>
+              )}
+              {stock.analysis && (
+                <div className="flex items-center justify-between gap-2 border-t border-hairline/60 px-3 py-2 text-xs">
+                  <span className="text-ink-3">Exit target</span>
+                  <ExitTargetCell analysis={stock.analysis} align="end" />
                 </div>
               )}
               {stock.signal && (
