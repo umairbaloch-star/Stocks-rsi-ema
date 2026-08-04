@@ -9,8 +9,8 @@ function tradingViewUrl(symbol) {
 }
 
 // star, symbol, name, price, % chg (day), RSI, volume, entry, confidence,
-// EMA20, EMA50, MACD, Signal, Predicted (next session), Final Stance
-const COLUMN_COUNT = 15;
+// EMA20, EMA50, MACD, Signal, Final Stance
+const COLUMN_COUNT = 14;
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -110,31 +110,6 @@ function DayChangeCell({ value, align = "end" }) {
       style={{ color }}
     >
       {formatPercent(n)}
-    </span>
-  );
-}
-
-/**
- * A same-inputs-every-time next-session projection (see
- * computeNextDayPrediction in lib/technicals.js) — the average of the last
- * few sessions' daily % moves, extrapolated one day forward and nudged by
- * whether EMA/MACD trend agrees. Explicitly NOT a guarantee; the tooltip and
- * label both say "projected" rather than implying certainty.
- */
-function PredictedCell({ prediction, align = "center" }) {
-  if (!prediction) return <span className="text-xs text-ink-3">—</span>;
-  const { predictedPrice, predictedChangePercent, direction, basis } = prediction;
-  const color =
-    direction === "up" ? "var(--up-text)" : direction === "down" ? "var(--down)" : "var(--ink-3)";
-  return (
-    <span
-      title={`Projected next-session close — not a guarantee. Basis: ${basis}.`}
-      className={`inline-flex flex-col gap-0.5 ${ALIGN_CLASS[align] ?? "items-center"}`}
-    >
-      <span className="font-mono text-[12px] tabular-nums text-ink">{formatPrice(predictedPrice)}</span>
-      <span className="font-mono text-[10px] tabular-nums" style={{ color }}>
-        {formatPercent(predictedChangePercent)}
-      </span>
     </span>
   );
 }
@@ -403,8 +378,8 @@ function SignalBadge({ signal }) {
 }
 
 /**
- * The single reconciled verdict — a weighted blend of Signal, Predicted,
- * MACD, EMA20/50, and RSI14 (see computeFinalStance in lib/technicals.js
+ * The single reconciled verdict — a weighted blend of Signal, MACD,
+ * EMA20/50, and RSI14 (see computeFinalStance in lib/technicals.js
  * for the weights and the exact vote per factor). Built so a user doesn't
  * have to eyeball several columns that can legitimately disagree; the
  * tooltip and expanded row spell out each factor's vote and weight, and how
@@ -653,15 +628,6 @@ function ExpandedChart({ stock, interval, period, thresholds }) {
           {signalSummary(stock.signal)}
         </p>
       )}
-      {stock.prediction && (
-        <p className="mb-1.5 text-[11px] text-ink-3">
-          <span className="font-semibold text-ink-2">
-            Predicted next close ~{formatPrice(stock.prediction.predictedPrice)} (
-            {formatPercent(stock.prediction.predictedChangePercent)}).
-          </span>{" "}
-          Basis: {stock.prediction.basis}. A trend/momentum extrapolation, not a guarantee.
-        </p>
-      )}
       {failed ? (
         <p className="py-4 text-sm text-ink-3">Couldn&apos;t load the RSI trend — try again.</p>
       ) : history === null ? (
@@ -703,11 +669,11 @@ export default function StocksTable({
           (still sticky on Y within the same container). */}
       <div className="hidden overflow-hidden rounded-xl border border-hairline bg-surface shadow-sm sm:block">
         <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full min-w-[1520px] table-fixed text-xs md:text-sm">
+          <table className="w-full min-w-[1420px] table-fixed text-xs md:text-sm">
             <colgroup>
               <col style={{ width: "3%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "14%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "5%" }} />
               <col style={{ width: "7%" }} />
@@ -717,9 +683,8 @@ export default function StocksTable({
               <col style={{ width: "6%" }} />
               <col style={{ width: "7%" }} />
               <col style={{ width: "5%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "7%" }} />
               <col style={{ width: "10%" }} />
+              <col style={{ width: "14%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <tr className="border-b border-grid">
@@ -806,16 +771,8 @@ export default function StocksTable({
                   <SortIndicator active={sortKey === "signal"} dir={sortDir} />
                 </th>
                 <th
-                  onClick={() => onSort("prediction")}
-                  title="Projected next-session close — a same-inputs-every-time momentum/trend extrapolation, not a guarantee. See the expanded row for the basis."
-                  className={`${sortableCell} text-center`}
-                >
-                  Predicted
-                  <SortIndicator active={sortKey === "prediction"} dir={sortDir} />
-                </th>
-                <th
                   onClick={() => onSort("finalStance")}
-                  title="One weighted verdict from Signal, Predicted, MACD, EMA20/50, and RSI(14) — see the expanded row for the weights and each factor's vote"
+                  title="One weighted verdict from Signal, MACD, EMA20/50, and RSI(14) — see the expanded row for the weights and each factor's vote"
                   className={`${sortableCell} text-center`}
                 >
                   Final Stance
@@ -881,9 +838,6 @@ export default function StocksTable({
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <SignalBadge signal={stock.signal} />
-                    </td>
-                    <td className="px-2 py-2.5 text-center">
-                      <PredictedCell prediction={stock.prediction} />
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <StanceBadge stance={stock.finalStance} />
@@ -952,17 +906,6 @@ export default function StocksTable({
                   <div className="text-xs text-ink-3">Vol {formatVolume(stock.volume)}</div>
                 </div>
               </div>
-              {stock.prediction && (
-                <div className="flex items-center justify-between gap-2 border-t border-hairline/60 px-3 py-2 text-xs">
-                  <span
-                    className="text-ink-3"
-                    title={`Projected next-session close — not a guarantee. Basis: ${stock.prediction.basis}.`}
-                  >
-                    Predicted next close
-                  </span>
-                  <PredictedCell prediction={stock.prediction} align="end" />
-                </div>
-              )}
               <div className="flex items-center justify-between px-3 pb-3">
                 <span className="text-[10px] uppercase tracking-wider text-ink-3">
                   RSI({period}) · {interval.label}
