@@ -8,9 +8,9 @@ function tradingViewUrl(symbol) {
   return `https://www.tradingview.com/chart/?symbol=PSX:${encodeURIComponent(symbol)}`;
 }
 
-// star, symbol, name, price, % chg (day), RSI, volume, entry, exit target,
+// star, symbol, name, price, % chg (day), RSI, volume, entry,
 // confidence, EMA20, EMA50, MACD, Signal, Final Stance
-const COLUMN_COUNT = 15;
+const COLUMN_COUNT = 14;
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -199,32 +199,6 @@ function EntryExitCell({ value }) {
   return (
     <span className="font-mono text-[13px] tabular-nums text-ink">
       {formatPrice(value)}
-    </span>
-  );
-}
-
-/**
- * The swing exit plan's price target (analysis.exitShortTerm) and the date
- * its ~10-session time-stop leg falls on (analysis.exitTargetDate) — "sell
- * here, or by here, whichever comes first," made concrete. The % shown is
- * profit from the suggested Entry price to this exit target, not from
- * today's price — see the tooltip and expanded row for the full plan.
- */
-function ExitTargetCell({ analysis, align = "center" }) {
-  if (!analysis) return <span className="text-xs text-ink-3">—</span>;
-  const { exitShortTerm, exitTargetDate, exitProfitPercent } = analysis;
-  const title = `Swing exit plan: sell at ~${formatPrice(exitShortTerm)} (${formatPercent(
-    exitProfitPercent
-  )} from the Entry price), or by ~${formatDate(
-    exitTargetDate
-  )} (${EXIT_HOLD_SESSIONS_LABEL}), or when daily RSI(14) recrosses ~50 — whichever comes first.`;
-  return (
-    <span title={title} className={`inline-flex flex-col gap-0.5 ${ALIGN_CLASS[align] ?? "items-center"}`}>
-      <span className="font-mono text-[12px] tabular-nums text-ink">{formatPrice(exitShortTerm)}</span>
-      <span className="font-mono text-[10px] tabular-nums text-up-text">
-        {formatPercent(exitProfitPercent)}
-      </span>
-      <span className="text-[10px] text-ink-3">by {formatDate(exitTargetDate)}</span>
     </span>
   );
 }
@@ -726,7 +700,6 @@ export default function StocksTable({
               <col style={{ width: "5%" }} />
               <col style={{ width: "5%" }} />
               <col style={{ width: "8%" }} />
-              <col style={{ width: "5%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "6%" }} />
               <col style={{ width: "5%" }} />
@@ -776,14 +749,6 @@ export default function StocksTable({
                 >
                   Entry
                   <SortIndicator active={sortKey === "entry"} dir={sortDir} />
-                </th>
-                <th
-                  onClick={() => onSort("exitTarget")}
-                  title="Swing exit plan: price target and the calendar date its ~10-session time-stop falls on — see the expanded row for the full plan"
-                  className={`${sortableCell} text-center`}
-                >
-                  Exit Target
-                  <SortIndicator active={sortKey === "exitTarget"} dir={sortDir} />
                 </th>
                 <th
                   onClick={() => onSort("confidence")}
@@ -878,9 +843,6 @@ export default function StocksTable({
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       <EntryExitCell value={stock.analysis?.entry} />
-                    </td>
-                    <td className="px-2 py-2.5 text-center">
-                      <ExitTargetCell analysis={stock.analysis} />
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <ConfidenceBadge analysis={stock.analysis} />
@@ -986,12 +948,6 @@ export default function StocksTable({
                     Entry <span className="font-mono text-ink-2">{formatPrice(stock.analysis.entry)}</span>
                   </span>
                   <ConfidenceBadge analysis={stock.analysis} />
-                </div>
-              )}
-              {stock.analysis && (
-                <div className="flex items-center justify-between gap-2 border-t border-hairline/60 px-3 py-2 text-xs">
-                  <span className="text-ink-3">Exit target</span>
-                  <ExitTargetCell analysis={stock.analysis} align="end" />
                 </div>
               )}
               {stock.signal && (
