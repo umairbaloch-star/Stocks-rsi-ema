@@ -78,7 +78,7 @@ export default function TopBar({ page, subtitle, updatedAt, loading, onRefresh, 
             <BrandMark />
             <div className="min-w-0">
               <h1 className="truncate text-base font-semibold leading-tight text-ink sm:text-lg">
-                PSX RSI Dashboard
+                stock-official(1-3weeks)03AUG2026
               </h1>
               {subtitle && (
                 <p className="hidden truncate text-[11px] leading-tight text-ink-3 sm:block">

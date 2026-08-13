@@ -1,11 +1,15 @@
 "use client";
 
+import { useState } from "react";
 import TopBar from "./components/TopBar";
 import StocksView from "./components/StocksView";
+import VolumeFilter from "./components/VolumeFilter";
 import { useStocks, useWatchlist } from "./hooks";
 
 export default function Home() {
   const { symbols: watchlist, toggle: toggleWatch } = useWatchlist();
+  const [minVolume, setMinVolume] = useState(0);
+  const [search, setSearch] = useState("");
   const {
     stocks,
     updatedAt,
@@ -16,13 +20,15 @@ export default function Home() {
     hasMore,
     restTotal,
     usingFallback,
-    minVolume,
+    baseMinVolume,
+    minVolume: effectiveMinVolume,
     lowVolumeHidden,
+    extraHidden,
     loading,
     error,
     loadMore,
     refresh,
-  } = useStocks(watchlist);
+  } = useStocks(watchlist, minVolume, search);
 
   const stillFilling = totalCount === 0 || loadedCount < totalCount;
   const fillPercent = totalCount > 0 ? Math.round((loadedCount / totalCount) * 100) : 0;
@@ -73,6 +79,12 @@ export default function Home() {
           </p>
         )}
 
+        <VolumeFilter
+          value={minVolume}
+          onChange={setMinVolume}
+          baseMinVolume={baseMinVolume}
+        />
+
         <StocksView
           stocks={stocks}
           loading={loading}
@@ -80,6 +92,8 @@ export default function Home() {
           usingFallback={usingFallback}
           watchlist={watchlist}
           onToggleWatch={toggleWatch}
+          search={search}
+          onSearchChange={setSearch}
         />
 
         {hasMore && (
@@ -100,11 +114,21 @@ export default function Home() {
           </p>
         )}
 
-        {lowVolumeHidden > 0 && (
-          <p className="pb-4 text-xs text-ink-3 sm:text-sm">
-            {lowVolumeHidden} illiquid stock{lowVolumeHidden === 1 ? "" : "s"} hidden — trading
-            under {minVolume.toLocaleString()} shares today
-          </p>
+        {(lowVolumeHidden > 0 || extraHidden > 0) && (
+          <div className="space-y-0.5 pb-4 text-xs text-ink-3 sm:text-sm">
+            {lowVolumeHidden > 0 && (
+              <p>
+                {lowVolumeHidden} illiquid stock{lowVolumeHidden === 1 ? "" : "s"} hidden —
+                trading under {baseMinVolume.toLocaleString()} shares today
+              </p>
+            )}
+            {extraHidden > 0 && (
+              <p>
+                {extraHidden} more stock{extraHidden === 1 ? "" : "s"} hidden by your{" "}
+                {effectiveMinVolume.toLocaleString()}-share volume filter
+              </p>
+            )}
+          </div>
         )}
       </main>
     </div>

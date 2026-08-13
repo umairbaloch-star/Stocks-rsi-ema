@@ -16,8 +16,18 @@ const LOADING_POLL_MS = 2000;
  * position the user is tracking could silently vanish if its liquidity
  * drops, since that filter runs server-side and the watchlist only lives in
  * this browser's localStorage.
+ *
+ * `minVolume` optionally tightens the server's default volume floor (see
+ * VOLUME_FILTER_PRESETS in lib/cache.js) — 0 or omitted just uses the
+ * server default. Changing it triggers an immediate re-fetch instead of
+ * waiting for the next poll.
+ *
+ * `search` (the search box's current text) rides along too so the server
+ * can exempt an exact symbol match from the volume floor and fetch it on
+ * demand if it isn't loaded yet (see ensureSearchSymbol in lib/cache.js) —
+ * changing it triggers a debounced re-fetch rather than one per keystroke.
  */
-export function useStocks(watchSymbols = []) {
+export function useStocks(watchSymbols = [], minVolume = 0, search = "") {
   const [data, setData] = useState({
     stocks: [],
     updatedAt: null,
@@ -28,8 +38,10 @@ export function useStocks(watchSymbols = []) {
     hasMore: false,
     restTotal: 0,
     usingFallback: false,
+    baseMinVolume: 0,
     minVolume: 0,
     lowVolumeHidden: 0,
+    extraHidden: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -39,6 +51,10 @@ export function useStocks(watchSymbols = []) {
   const wantAllRef = useRef(false);
   const watchSymbolsRef = useRef(watchSymbols);
   watchSymbolsRef.current = watchSymbols;
+  const minVolumeRef = useRef(minVolume);
+  minVolumeRef.current = minVolume;
+  const searchRef = useRef(search);
+  searchRef.current = search;
   const timerRef = useRef(null);
   const cancelledRef = useRef(false);
 
@@ -47,8 +63,10 @@ export function useStocks(watchSymbols = []) {
       const params = new URLSearchParams();
       if (wantAllRef.current) params.set("scope", "all");
       params.set("watch", watchSymbolsRef.current.join(","));
+      if (minVolumeRef.current > 0) params.set("minVolume", String(minVolumeRef.current));
+      if (searchRef.current.trim()) params.set("search", searchRef.current.trim());
       // force = the user pressed Refresh: the server re-fetches live prices
-      // from PSX's market-watch page and recomputes RSI before responding.
+      // from PSX's market-watch page and recomputes RSI before answering.
       if (force) params.set("refresh", "1");
       const qs = params.toString();
       const res = await fetch(`/api/stocks${qs ? `?${qs}` : ""}`);
@@ -83,6 +101,38 @@ export function useStocks(watchSymbols = []) {
       clearTimeout(timerRef.current);
     };
   }, [runPoll]);
+
+  // Re-fetch immediately when the caller changes the volume filter, instead
+  // of waiting out the (possibly 5-minute idle) poll interval. Skips the
+  // mount render — the effect above already fetches with the initial value.
+  const mountedRef = useRef(false);
+  useEffect(() => {
+    if (!mountedRef.current) {
+      mountedRef.current = true;
+      return;
+    }
+    clearTimeout(timerRef.current);
+    runPoll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [minVolume]);
+
+  // Same immediate re-fetch on a search-box change, but debounced — a
+  // symbol paste (or fast typing) shouldn't fire one request per keystroke.
+  const searchDebounceRef = useRef(null);
+  const searchMountedRef = useRef(false);
+  useEffect(() => {
+    if (!searchMountedRef.current) {
+      searchMountedRef.current = true;
+      return;
+    }
+    clearTimeout(searchDebounceRef.current);
+    searchDebounceRef.current = setTimeout(() => {
+      clearTimeout(timerRef.current);
+      runPoll();
+    }, 400);
+    return () => clearTimeout(searchDebounceRef.current);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
 
   const loadMore = useCallback(() => {
     wantAllRef.current = true;

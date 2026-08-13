@@ -16,7 +16,15 @@ export async function GET(request) {
     if (params.get("refresh") === "1") {
       await refreshLivePrices();
     }
-    const data = await getStockData(params.get("scope") === "all");
+    // Optional client-chosen volume floor, tighter than the server default
+    // (see VOLUME_FILTER_PRESETS / getStockData in lib/cache.js).
+    const minVolume = Number(params.get("minVolume"));
+    // The search box's current text — an exact symbol match is exempted
+    // from the volume floor and fetched on demand if not already loaded
+    // (see ensureSearchSymbol in lib/cache.js), so pasting any real PSX
+    // symbol always finds it.
+    const search = params.get("search") || "";
+    const data = await getStockData(params.get("scope") === "all", minVolume, search);
     return NextResponse.json(data);
   } catch (err) {
     return NextResponse.json(

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import StocksTable from "./StocksTable";
 import MarketSummary from "./MarketSummary";
-import { RSI_INTERVALS, RSI_PERIODS, BUY_SIGNAL } from "@/lib/rsi";
+import { RSI_INTERVALS, RSI_PERIODS, BUY_SIGNAL, SELL_SIGNAL } from "@/lib/rsi";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
@@ -13,6 +13,7 @@ const DEFAULT_PERIOD = 14;
 const FILTERS = [
   { key: "all", label: "All" },
   { key: "signals", label: "Buy signals" },
+  { key: "sellSignals", label: "Sell signals" },
   { key: "oversold", label: "Oversold" },
   { key: "overbought", label: "Overbought" },
   { key: "kse100", label: "KSE-100" },
@@ -67,8 +68,18 @@ export default function StocksView({
   watchlist,
   onToggleWatch,
   emptyState = null,
+  // Uncontrolled by default (internal state) — the dashboard passes both
+  // props to lift search up to useStocks, so an exact symbol match can be
+  // fetched on demand and exempted from the server's volume floor (see
+  // ensureSearchSymbol in lib/cache.js). The watchlist page doesn't need
+  // that (everything it shows is already loaded), so it omits both and
+  // gets plain client-side filtering, same as before.
+  search: controlledSearch,
+  onSearchChange,
 }) {
-  const [search, setSearch] = useState("");
+  const [internalSearch, setInternalSearch] = useState("");
+  const search = controlledSearch ?? internalSearch;
+  const setSearch = onSearchChange ?? setInternalSearch;
   const [quickFilter, setQuickFilter] = useState("all");
   const [intervalKey, setIntervalKey] = useState(DEFAULT_INTERVAL);
   const [period, setPeriod] = useState(DEFAULT_PERIOD);
@@ -104,6 +115,7 @@ export default function StocksView({
       }
       const v = s.rsi?.[period]?.[interval.key];
       if (quickFilter === "signals") return Boolean(s.buySignal);
+      if (quickFilter === "sellSignals") return Boolean(s.sellSignal);
       if (quickFilter === "oversold")
         return v !== null && v !== undefined && v <= thresholds.oversold;
       if (quickFilter === "overbought")
@@ -116,9 +128,22 @@ export default function StocksView({
 
   const sorted = useMemo(() => {
     const copy = [...filtered];
+    const CONFIDENCE_RANK = { High: 3, Medium: 2, Low: 1 };
+    const CALL_RANK = { Bullish: 3, Buy: 3, Neutral: 2, Watch: 2, Bearish: 1, Sell: 1 };
+    const value = (s) => {
+      if (sortKey === "rsi") return s.rsi?.[period]?.[interval.key] ?? null;
+      if (sortKey === "entry") return s.analysis?.entry ?? null;
+      if (sortKey === "confidence") return CONFIDENCE_RANK[s.analysis?.confidence] ?? null;
+      if (sortKey === "ema20") return s.signal?.ema20 ?? null;
+      if (sortKey === "ema50") return s.signal?.ema50 ?? null;
+      if (sortKey === "macd") return s.signal?.macdScore ?? null;
+      if (sortKey === "signal") return CALL_RANK[s.signal?.signal] ?? null;
+      if (sortKey === "finalStance") return s.finalStance?.score ?? null;
+      return s[sortKey];
+    };
     copy.sort((a, b) => {
-      const av = sortKey === "rsi" ? (a.rsi?.[period]?.[interval.key] ?? null) : a[sortKey];
-      const bv = sortKey === "rsi" ? (b.rsi?.[period]?.[interval.key] ?? null) : b[sortKey];
+      const av = value(a);
+      const bv = value(b);
       if (av === null || av === undefined) return 1;
       if (bv === null || bv === undefined) return -1;
       if (typeof av === "string") {
@@ -212,11 +237,13 @@ export default function StocksView({
               const hint =
                 f.key === "signals"
                   ? `Swing-entry setups: daily RSI(14) ≤ ${BUY_SIGNAL.rsi14Max} and RSI(2) ≤ ${BUY_SIGNAL.rsi2Max}. Exit: RSI(14) back above ~50, +5–8%, or ~10 sessions.`
-                  : f.key === "oversold"
-                    ? `RSI(${period}) ≤ ${thresholds.oversold} on ${interval.label} candles`
-                    : f.key === "overbought"
-                      ? `RSI(${period}) ≥ ${thresholds.overbought} on ${interval.label} candles`
-                      : undefined;
+                  : f.key === "sellSignals"
+                    ? `Swing take-profit / avoid-entry setups: daily RSI(14) ≥ ${SELL_SIGNAL.rsi14Min} and RSI(2) ≥ ${SELL_SIGNAL.rsi2Min}.`
+                    : f.key === "oversold"
+                      ? `RSI(${period}) ≤ ${thresholds.oversold} on ${interval.label} candles`
+                      : f.key === "overbought"
+                        ? `RSI(${period}) ≥ ${thresholds.overbought} on ${interval.label} candles`
+                        : undefined;
               const active = quickFilter === f.key;
               return (
                 <button
