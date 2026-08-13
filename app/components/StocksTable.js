@@ -9,8 +9,8 @@ function tradingViewUrl(symbol) {
 }
 
 // star, symbol, name, price, % chg (day), RSI, volume, entry,
-// confidence, EMA20, EMA50, MACD, Signal, Final Stance
-const COLUMN_COUNT = 14;
+// confidence, EMA20, EMA50, MACD, Final Stance
+const COLUMN_COUNT = 13;
 
 // A value's zone decides the meter-fill color: the two extremes wear the
 // reserved status hues (oversold = green "buy" signal, overbought = red),
@@ -356,33 +356,6 @@ function MacdCell({ signal, align = "center", showLabel = false }) {
 }
 
 /**
- * The Buy/Sell/Watch call: RSI(14) + EMA trend + MACD vote bullish/bearish/
- * neutral, volume confirms (or, if thin, downgrades a would-be call to
- * Watch) — see computeSimpleSignal in lib/technicals.js for the exact rule.
- */
-function SignalBadge({ signal }) {
-  if (!signal) return <span className="text-xs text-ink-3">—</span>;
-  const title = `RSI(14) ${
-    signal.rsi14 ?? "n/a"
-  } · EMA trend ${signal.emaTrend ?? "n/a"} · MACD ${signal.macdLabel ?? "n/a"} (${
-    signal.macdScore !== null && signal.macdScore !== undefined
-      ? (signal.macdScore > 0 ? "+" : "") + signal.macdScore
-      : "n/a"
-  }) · Volume ${
-    signal.volumeRatio !== null ? `${signal.volumeRatio}× the 20-day average` : "n/a"
-  }${signal.thinVolume ? " (thin — downgrades Buy/Sell to Watch)" : ""} · RSI(5) ${
-    signal.rsi5 ?? "n/a"
-  }${
-    signal.extendedOverbought
-      ? " (already extended ≥70 — downgrades Buy to Watch)"
-      : signal.extendedOversold
-        ? " (already extended ≤30 — downgrades Sell to Watch)"
-        : ""
-  }`;
-  return <CallBadge label={signal.signal} title={title} />;
-}
-
-/**
  * The single reconciled verdict — a weighted blend of Signal, MACD,
  * EMA20/50, and RSI14 (see computeFinalStance in lib/technicals.js
  * for the weights and the exact vote per factor). Built so a user doesn't
@@ -689,22 +662,21 @@ export default function StocksTable({
           (still sticky on Y within the same container). */}
       <div className="hidden overflow-hidden rounded-xl border border-hairline bg-surface shadow-sm sm:block">
         <div className="max-h-[70vh] overflow-auto">
-          <table className="w-full min-w-[1560px] table-fixed text-xs md:text-sm">
+          <table className="w-full min-w-[1420px] table-fixed text-xs md:text-sm">
             <colgroup>
               <col style={{ width: "3%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "6%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "5%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "5%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "5%" }} />
-              <col style={{ width: "5%" }} />
-              <col style={{ width: "8%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "7%" }} />
               <col style={{ width: "6%" }} />
-              <col style={{ width: "6%" }} />
-              <col style={{ width: "5%" }} />
-              <col style={{ width: "8%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "20%" }} />
             </colgroup>
             <thead className="sticky top-0 z-10 bg-surface/95 backdrop-blur supports-[backdrop-filter]:bg-surface/85">
               <tr className="border-b border-grid">
@@ -783,14 +755,6 @@ export default function StocksTable({
                   <SortIndicator active={sortKey === "macd"} dir={sortDir} />
                 </th>
                 <th
-                  onClick={() => onSort("signal")}
-                  title="RSI + EMA + MACD vote, volume confirms — see the expanded row for the breakdown"
-                  className={`${sortableCell} text-center`}
-                >
-                  Signal
-                  <SortIndicator active={sortKey === "signal"} dir={sortDir} />
-                </th>
-                <th
                   onClick={() => onSort("finalStance")}
                   title="One weighted verdict from Signal, MACD, EMA20/50, and RSI(14) — see the expanded row for the weights and each factor's vote"
                   className={`${sortableCell} text-center`}
@@ -855,9 +819,6 @@ export default function StocksTable({
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <MacdCell signal={stock.signal} />
-                    </td>
-                    <td className="px-2 py-2.5 text-center">
-                      <SignalBadge signal={stock.signal} />
                     </td>
                     <td className="px-2 py-2.5 text-center">
                       <StanceBadge stance={stock.finalStance} />
@@ -952,12 +913,12 @@ export default function StocksTable({
               )}
               {stock.signal && (
                 <div className="flex items-center justify-between gap-1.5 border-t border-hairline/60 px-3 py-2 text-xs">
+                  <span className="text-ink-3">EMA / MACD</span>
                   <span className="flex items-center gap-2.5">
                     <EmaValueCell price={stock.price} ema={stock.signal.ema20} period={20} align="end" />
                     <EmaValueCell price={stock.price} ema={stock.signal.ema50} period={50} align="end" />
                     <MacdCell signal={stock.signal} align="end" />
                   </span>
-                  <SignalBadge signal={stock.signal} />
                 </div>
               )}
             </div>
