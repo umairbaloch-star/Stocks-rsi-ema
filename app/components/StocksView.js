@@ -49,6 +49,62 @@ function SearchIcon() {
   );
 }
 
+/**
+ * Row count + rows-per-page + Previous/Next — shared by the bar above and
+ * below the table so paging doesn't require scrolling back down (or up) to
+ * find the controls on a long page.
+ */
+function PaginationBar({
+  sorted,
+  contextLabel,
+  currentPage,
+  totalPages,
+  pageSize,
+  onPageSizeChange,
+  onPrev,
+  onNext,
+}) {
+  return (
+    <div className="flex flex-col gap-2 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:text-sm">
+      <span>
+        {sorted.length} stocks ({contextLabel}) — page {currentPage} of {totalPages}
+      </span>
+      <div className="flex items-center gap-3">
+        <label className="flex items-center gap-1.5">
+          Rows:
+          <select
+            value={pageSize}
+            onChange={onPageSizeChange}
+            className="rounded-md border border-hairline bg-surface px-2 py-1 text-ink-2"
+          >
+            {PAGE_SIZE_OPTIONS.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </select>
+        </label>
+        <div className="flex gap-2">
+          <button
+            disabled={currentPage <= 1}
+            onClick={onPrev}
+            className="rounded-md border border-hairline bg-surface px-3 py-1 text-ink-2 transition-colors hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-surface"
+          >
+            Previous
+          </button>
+          <button
+            disabled={currentPage >= totalPages}
+            onClick={onNext}
+            className="rounded-md border border-hairline bg-surface px-3 py-1 text-ink-2 transition-colors hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-surface"
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ThresholdLegend({ thresholds }) {
   return (
     <div className="hidden items-center gap-3 text-[11px] text-ink-3 lg:flex">
@@ -281,63 +337,52 @@ export default function StocksView({
       ) : stocks.length === 0 && emptyState ? (
         emptyState
       ) : (
-        <StocksTable
-          stocks={pageItems}
-          interval={interval}
-          period={period}
-          thresholds={thresholds}
-          sortKey={sortKey}
-          sortDir={sortDir}
-          onSort={handleSort}
-          expandedSymbol={expandedSymbol}
-          onToggleExpand={(symbol) =>
-            setExpandedSymbol((cur) => (cur === symbol ? null : symbol))
-          }
-          watchlist={watchlist}
-          onToggleWatch={onToggleWatch}
-        />
-      )}
+        <>
+          <PaginationBar
+            sorted={sorted}
+            contextLabel={contextLabel}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            onPageSizeChange={(e) => {
+              updatePrefs({ pageSize: Number(e.target.value) });
+              setPage(1);
+            }}
+            onPrev={() => setPage((p) => p - 1)}
+            onNext={() => setPage((p) => p + 1)}
+          />
 
-      <div className="flex flex-col gap-2 text-xs text-ink-3 sm:flex-row sm:items-center sm:justify-between sm:text-sm">
-        <span>
-          {sorted.length} stocks ({contextLabel}) — page {currentPage} of {totalPages}
-        </span>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1.5">
-            Rows:
-            <select
-              value={pageSize}
-              onChange={(e) => {
-                updatePrefs({ pageSize: Number(e.target.value) });
-                setPage(1);
-              }}
-              className="rounded-md border border-hairline bg-surface px-2 py-1 text-ink-2"
-            >
-              {PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </select>
-          </label>
-          <div className="flex gap-2">
-            <button
-              disabled={currentPage <= 1}
-              onClick={() => setPage((p) => p - 1)}
-              className="rounded-md border border-hairline bg-surface px-3 py-1 text-ink-2 transition-colors hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-surface"
-            >
-              Previous
-            </button>
-            <button
-              disabled={currentPage >= totalPages}
-              onClick={() => setPage((p) => p + 1)}
-              className="rounded-md border border-hairline bg-surface px-3 py-1 text-ink-2 transition-colors hover:bg-surface-2 disabled:opacity-40 disabled:hover:bg-surface"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      </div>
+          <StocksTable
+            stocks={pageItems}
+            interval={interval}
+            period={period}
+            thresholds={thresholds}
+            sortKey={sortKey}
+            sortDir={sortDir}
+            onSort={handleSort}
+            expandedSymbol={expandedSymbol}
+            onToggleExpand={(symbol) =>
+              setExpandedSymbol((cur) => (cur === symbol ? null : symbol))
+            }
+            watchlist={watchlist}
+            onToggleWatch={onToggleWatch}
+          />
+
+          <PaginationBar
+            sorted={sorted}
+            contextLabel={contextLabel}
+            currentPage={currentPage}
+            totalPages={totalPages}
+            pageSize={pageSize}
+            onPageSizeChange={(e) => {
+              updatePrefs({ pageSize: Number(e.target.value) });
+              setPage(1);
+            }}
+            onPrev={() => setPage((p) => p - 1)}
+            onNext={() => setPage((p) => p + 1)}
+          />
+        </>
+      )}
     </>
   );
 }
