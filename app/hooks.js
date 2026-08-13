@@ -205,32 +205,33 @@ const TABLE_PREFS_KEY = "psx-rsi-table-prefs";
  *
  * Starts from `defaults` on first render (SSR-safe — localStorage isn't
  * touched until the mount effect below runs client-side), then syncs from
- * storage once mounted. The write-back effect is gated on `hydrated` so it
- * never fires before that read, which would otherwise overwrite a saved
- * preference with the just-rendered defaults.
+ * storage once mounted. Writing back happens only inside `update` itself
+ * (not a separate effect keyed on `prefs`) — a write-effect would fire in
+ * the same mount commit as the read-effect above, after `hydrated` had
+ * already flipped true but before the read's `setPrefs` had actually been
+ * applied, so it would immediately re-save the pre-hydration defaults over
+ * whatever was just loaded. Persisting only from explicit user-driven
+ * `update` calls (which by definition happen after mount) sidesteps that
+ * race entirely.
  */
 export function usePersistedPrefs(defaults) {
   const [prefs, setPrefs] = useState(defaults);
-  const hydrated = useRef(false);
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(TABLE_PREFS_KEY);
       if (raw) setPrefs((p) => ({ ...p, ...JSON.parse(raw) }));
     } catch {}
-    hydrated.current = true;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  useEffect(() => {
-    if (!hydrated.current) return;
-    try {
-      localStorage.setItem(TABLE_PREFS_KEY, JSON.stringify(prefs));
-    } catch {}
-  }, [prefs]);
-
   const update = useCallback((patch) => {
-    setPrefs((p) => ({ ...p, ...(typeof patch === "function" ? patch(p) : patch) }));
+    setPrefs((p) => {
+      const next = { ...p, ...(typeof patch === "function" ? patch(p) : patch) };
+      try {
+        localStorage.setItem(TABLE_PREFS_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
   }, []);
 
   return [prefs, update];
