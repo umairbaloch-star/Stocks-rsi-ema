@@ -4,11 +4,21 @@ import { useMemo, useState } from "react";
 import StocksTable from "./StocksTable";
 import MarketSummary from "./MarketSummary";
 import { RSI_INTERVALS, RSI_PERIODS, BUY_SIGNAL, SELL_SIGNAL } from "@/lib/rsi";
+import { usePersistedPrefs } from "../hooks";
 
 const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
 const DEFAULT_PAGE_SIZE = 25;
 const DEFAULT_INTERVAL = "1D";
 const DEFAULT_PERIOD = 14;
+
+const DEFAULT_PREFS = {
+  quickFilter: "all",
+  intervalKey: DEFAULT_INTERVAL,
+  period: DEFAULT_PERIOD,
+  sortKey: "symbol",
+  sortDir: "asc",
+  pageSize: DEFAULT_PAGE_SIZE,
+};
 
 const FILTERS = [
   { key: "all", label: "All" },
@@ -80,13 +90,15 @@ export default function StocksView({
   const [internalSearch, setInternalSearch] = useState("");
   const search = controlledSearch ?? internalSearch;
   const setSearch = onSearchChange ?? setInternalSearch;
-  const [quickFilter, setQuickFilter] = useState("all");
-  const [intervalKey, setIntervalKey] = useState(DEFAULT_INTERVAL);
-  const [period, setPeriod] = useState(DEFAULT_PERIOD);
-  const [sortKey, setSortKey] = useState("symbol");
-  const [sortDir, setSortDir] = useState("asc");
+  // View preferences persist across navigation (see usePersistedPrefs) —
+  // switching between the dashboard and watchlist pages re-mounts this
+  // component, which would otherwise reset RSI period, rows-per-page, etc.
+  // back to their defaults every time. Page number and the expanded row stay
+  // local/ephemeral — they don't make sense to carry between differently
+  // sized lists.
+  const [prefs, updatePrefs] = usePersistedPrefs(DEFAULT_PREFS);
+  const { quickFilter, intervalKey, period, sortKey, sortDir, pageSize } = prefs;
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [expandedSymbol, setExpandedSymbol] = useState(null);
 
   const interval =
@@ -98,12 +110,10 @@ export default function StocksView({
   };
 
   function handleSort(key) {
-    if (key === sortKey) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDir("asc");
-    }
+    updatePrefs((p) => ({
+      sortKey: key,
+      sortDir: key === p.sortKey ? (p.sortDir === "asc" ? "desc" : "asc") : "asc",
+    }));
     setPage(1);
   }
 
@@ -194,7 +204,7 @@ export default function StocksView({
             <select
               value={period}
               onChange={(e) => {
-                setPeriod(Number(e.target.value));
+                updatePrefs({ period: Number(e.target.value) });
                 setPage(1);
               }}
               title="RSI look-back period — shorter reacts faster (RSI(5)/RSI(2) suit 1–2 week swing holds)"
@@ -215,7 +225,7 @@ export default function StocksView({
             <select
               value={interval.key}
               onChange={(e) => {
-                setIntervalKey(e.target.value);
+                updatePrefs({ intervalKey: e.target.value });
                 setPage(1);
               }}
               title="Candle interval for RSI(14) — like TradingView's interval menu (PSX's free feed is end-of-day, so intervals start at 1 day)"
@@ -249,7 +259,7 @@ export default function StocksView({
                 <button
                   key={f.key}
                   onClick={() => {
-                    setQuickFilter(f.key);
+                    updatePrefs({ quickFilter: f.key });
                     setPage(1);
                   }}
                   title={hint}
@@ -298,7 +308,7 @@ export default function StocksView({
             <select
               value={pageSize}
               onChange={(e) => {
-                setPageSize(Number(e.target.value));
+                updatePrefs({ pageSize: Number(e.target.value) });
                 setPage(1);
               }}
               className="rounded-md border border-hairline bg-surface px-2 py-1 text-ink-2"

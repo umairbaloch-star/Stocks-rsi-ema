@@ -192,3 +192,46 @@ export function useWatchlist() {
 
   return { symbols, toggle };
 }
+
+const TABLE_PREFS_KEY = "psx-rsi-table-prefs";
+
+/**
+ * The stock table's view preferences (RSI period/interval, quick filter,
+ * sort, rows-per-page) — persisted in localStorage and shared by both the
+ * dashboard and watchlist pages, so switching between them keeps whatever
+ * the user last chose instead of falling back to defaults (StocksView
+ * re-mounts on every route change, which would otherwise reset its own
+ * useState back to its initial values every time).
+ *
+ * Starts from `defaults` on first render (SSR-safe — localStorage isn't
+ * touched until the mount effect below runs client-side), then syncs from
+ * storage once mounted. The write-back effect is gated on `hydrated` so it
+ * never fires before that read, which would otherwise overwrite a saved
+ * preference with the just-rendered defaults.
+ */
+export function usePersistedPrefs(defaults) {
+  const [prefs, setPrefs] = useState(defaults);
+  const hydrated = useRef(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(TABLE_PREFS_KEY);
+      if (raw) setPrefs((p) => ({ ...p, ...JSON.parse(raw) }));
+    } catch {}
+    hydrated.current = true;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!hydrated.current) return;
+    try {
+      localStorage.setItem(TABLE_PREFS_KEY, JSON.stringify(prefs));
+    } catch {}
+  }, [prefs]);
+
+  const update = useCallback((patch) => {
+    setPrefs((p) => ({ ...p, ...(typeof patch === "function" ? patch(p) : patch) }));
+  }, []);
+
+  return [prefs, update];
+}
